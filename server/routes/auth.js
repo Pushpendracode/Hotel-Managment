@@ -103,10 +103,19 @@ router.get('/me', async (req, res) => {
 })
 
 // TEMP SEED ROUTE - remove after seeding
+// TEMP SEED ROUTE
 router.get('/seed-now', async (req, res) => {
   try {
-    const db = mongoose.connection.db
+    // Connect directly with the env URI
+    const uri = process.env.MONGO_URI
+    if (!uri) return res.status(500).json({ message: 'MONGO_URI not set' })
+    
+    // Use a fresh connection
+    const conn = await require('mongoose').createConnection(uri).asPromise()
+    const db = conn.db
+    
     await db.collection('users').deleteMany({})
+    const bcrypt = require('bcryptjs')
     const p1 = await bcrypt.hash('admin123', 10)
     const p2 = await bcrypt.hash('staff123', 10)
     const p3 = await bcrypt.hash('res123', 10)
@@ -115,10 +124,19 @@ router.get('/seed-now', async (req, res) => {
       { name:'Staff Member',  email:'staff@hostelpro.com',    password:p2, role:'staff',    isActive:true, createdAt:new Date() },
       { name:'Resident User', email:'resident@hostelpro.com', password:p3, role:'resident', isActive:true, createdAt:new Date() },
     ])
-    res.json({ message: '✅ Seeded successfully!' })
+    await conn.close()
+    res.json({ message: '✅ Seeded! 3 users created.' })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
+})
+
+// TEMP DEBUG ROUTE
+router.get('/check-env', (req, res) => {
+  res.json({ 
+    mongo_uri_set: !!process.env.MONGO_URI,
+    mongo_uri_preview: process.env.MONGO_URI?.substring(0, 30) + '...'
+  })
 })
 
 module.exports = router
