@@ -12,7 +12,8 @@ mongoose.connect('mongodb://127.0.0.1:27017/hostel-pro')
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    process.env.CLIENT_URL || 'https://your-app.netlify.app'
+    'https://hotel-managment.netlify.app',
+    /\.netlify\.app$/  // allows any netlify subdomain
   ],
   credentials: true
 }))
