@@ -102,6 +102,23 @@ router.get('/me', async (req, res) => {
   }
 })
 
-
+// TEMP SEED ROUTE - remove after seeding
+router.get('/seed-now', async (req, res) => {
+  try {
+    const db = mongoose.connection.db
+    await db.collection('users').deleteMany({})
+    const p1 = await bcrypt.hash('admin123', 10)
+    const p2 = await bcrypt.hash('staff123', 10)
+    const p3 = await bcrypt.hash('res123', 10)
+    await db.collection('users').insertMany([
+      { name:'Admin User',    email:'admin@hostelpro.com',    password:p1, role:'admin',    isActive:true, createdAt:new Date() },
+      { name:'Staff Member',  email:'staff@hostelpro.com',    password:p2, role:'staff',    isActive:true, createdAt:new Date() },
+      { name:'Resident User', email:'resident@hostelpro.com', password:p3, role:'resident', isActive:true, createdAt:new Date() },
+    ])
+    res.json({ message: '✅ Seeded successfully!' })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
 
 module.exports = router
