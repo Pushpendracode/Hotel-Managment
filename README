@@ -1,0 +1,53 @@
+# HostelPro — Hostel Management System
+
+A comprehensive MERN stack hostel management system built for managing rooms, residents, billing, and maintenance.
+
+## 🔗 Live Demo
+- **Frontend:** https://hotelmanagmen.netlify.app
+- **Backend API:** https://hotel-managment-agx7.onrender.com
+
+## 🔑 Test Credentials
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@hostelpro.com | admin123 |
+| Staff | staff@hostelpro.com | staff123 |
+| Resident | resident@hostelpro.com | res123 |
+
+## ✨ Features
+- JWT Authentication with role-based access (Admin, Staff, Resident)
+- Room Allocation with real-time floor grid view
+- Resident Management with check-in/checkout
+- Maintenance Request tracking and assignment
+- Billing and Invoice generation with payment recording
+- Financial Reports with charts and graphs
+- User Role management and permissions
+- Notifications system
+
+## 🛠 Tech Stack
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, Vite, TailwindCSS, Recharts |
+| Backend | Node.js, Express.js |
+| Database | MongoDB Atlas |
+| Auth | JWT + bcrypt |
+| Deployment | Netlify + Render |
+
+## 🚀 Run Locally
+
+### Backend
+```bash
+cd server
+npm install
+npm run dev
+# Server runs on http://localhost:5000
+```
+
+### Frontend
+```bash
+cd client
+npm install
+npm run dev
+# App runs on http://localhost:5173
+```
+
+## 📁 Project Structure
