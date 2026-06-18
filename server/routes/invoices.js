@@ -4,13 +4,17 @@ const Invoice  = require('../models/Invoice')
 const Resident = require('../models/Resident')
 const { verifyToken, checkRole } = require('../middleware/auth')
 
-// GET all invoices
+// GET invoices — residents see only their own
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const { status, residentId } = req.query
-    const filter = {}
-    if (status)     filter.status     = status
-    if (residentId) filter.residentId = residentId
+    let filter = {}
+    if (req.user.role === 'resident') {
+      const resident = await Resident.findOne({ email: req.user.email })
+      if (!resident) return res.json([])
+      filter.residentId = resident._id
+    }
+    const { status } = req.query
+    if (status) filter.status = status
     const invoices = await Invoice.find(filter)
       .populate('residentId', 'name email roomId')
       .sort({ createdAt: -1 })
@@ -20,7 +24,7 @@ router.get('/', verifyToken, async (req, res) => {
   }
 })
 
-// POST generate invoice
+// POST generate — admin/staff only
 router.post('/generate', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
     const { residentId, lineItems, discount, lateFee, dueDate } = req.body
@@ -36,13 +40,21 @@ router.post('/generate', verifyToken, checkRole(['admin','staff']), async (req, 
   }
 })
 
-// POST pay invoice
+// POST pay — residents can only pay their own invoices
 router.post('/:id/pay', verifyToken, async (req, res) => {
   try {
-    const { amount, method } = req.body
     const invoice = await Invoice.findById(req.params.id)
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' })
 
+    // Residents can only pay their own invoices
+    if (req.user.role === 'resident') {
+      const resident = await Resident.findOne({ email: req.user.email })
+      if (!resident || invoice.residentId.toString() !== resident._id.toString()) {
+        return res.status(403).json({ message: 'Access denied' })
+      }
+    }
+
+    const { amount, method } = req.body
     invoice.paymentHistory.push({ amount, method, paidAt: new Date() })
     const totalPaid = invoice.paymentHistory.reduce((s, p) => s + p.amount, 0)
     invoice.status  = totalPaid >= invoice.total ? 'paid' : 'partial'
@@ -53,19 +65,7 @@ router.post('/:id/pay', verifyToken, async (req, res) => {
   }
 })
 
-// PUT mark overdue
-router.put('/:id/overdue', verifyToken, checkRole(['admin']), async (req, res) => {
-  try {
-    const invoice = await Invoice.findByIdAndUpdate(
-      req.params.id, { status: 'overdue' }, { new: true }
-    )
-    res.json(invoice)
-  } catch (err) {
-    res.status(500).json({ message: err.message })
-  }
-})
-
-// DELETE
+// DELETE — admin only
 router.delete('/:id', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
     await Invoice.findByIdAndDelete(req.params.id)

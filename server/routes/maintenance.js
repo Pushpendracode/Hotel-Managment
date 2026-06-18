@@ -3,13 +3,16 @@ const router      = express.Router()
 const Maintenance = require('../models/Maintenance')
 const { verifyToken, checkRole } = require('../middleware/auth')
 
-// GET all
+// GET — residents see only their own
 router.get('/', verifyToken, async (req, res) => {
   try {
     const { status, priority } = req.query
     const filter = {}
     if (status)   filter.status   = status
     if (priority) filter.priority = priority
+    if (req.user.role === 'resident') {
+      filter.residentId = req.user._id
+    }
     const requests = await Maintenance.find(filter)
       .populate('roomId', 'number floor')
       .populate('residentId', 'name')
@@ -33,7 +36,7 @@ router.post('/', verifyToken, async (req, res) => {
   }
 })
 
-// PUT assign
+// PUT assign — admin/staff only
 router.put('/:id/assign', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
     const request = await Maintenance.findByIdAndUpdate(
@@ -47,7 +50,7 @@ router.put('/:id/assign', verifyToken, checkRole(['admin','staff']), async (req,
   }
 })
 
-// PUT update status
+// PUT status — admin/staff only
 router.put('/:id/status', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
     const request = await Maintenance.findByIdAndUpdate(
@@ -61,7 +64,7 @@ router.put('/:id/status', verifyToken, checkRole(['admin','staff']), async (req,
   }
 })
 
-// DELETE
+// DELETE — admin only
 router.delete('/:id', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
     await Maintenance.findByIdAndDelete(req.params.id)
