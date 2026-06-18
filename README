@@ -1,6 +1,6 @@
 # HostelPro — Hostel Management System
 
-A comprehensive MERN stack hostel management system built for managing rooms, residents, billing, and maintenance.
+A comprehensive MERN stack hostel management system for managing rooms, residents, billing, and maintenance.
 
 ## 🔗 Live Demo
 - **Frontend:** https://hotelmanagmen.netlify.app
@@ -14,14 +14,27 @@ A comprehensive MERN stack hostel management system built for managing rooms, re
 | Resident | resident@hostelpro.com | res123 |
 
 ## ✨ Features
-- JWT Authentication with role-based access (Admin, Staff, Resident)
-- Room Allocation with real-time floor grid view
+- JWT Authentication with role-based access control (Admin, Staff, Resident)
+- Room Allocation with real-time floor grid view and room creation
 - Resident Management with check-in/checkout
-- Maintenance Request tracking and assignment
-- Billing and Invoice generation with payment recording
-- Financial Reports with charts and graphs
+- Maintenance Request tracking (residents see only their own)
+- Billing and Invoice generation (residents see only their own invoices)
+- Financial Reports with charts (admin only)
 - User Role management and permissions
-- Notifications system
+
+## 🔐 RBAC Permissions
+| Feature | Admin | Staff | Resident |
+|---------|-------|-------|----------|
+| View all rooms | ✅ | ✅ | ❌ |
+| Create/Edit rooms | ✅ | ❌ | ❌ |
+| View all residents | ✅ | ✅ | ❌ |
+| View own profile | ✅ | ✅ | ✅ |
+| All maintenance requests | ✅ | ✅ | ❌ |
+| Own maintenance only | ✅ | ✅ | ✅ |
+| All invoices | ✅ | ✅ | ❌ |
+| Own invoices only | ✅ | ✅ | ✅ |
+| Financial reports | ✅ | ❌ | ❌ |
+| User management | ✅ | ❌ | ❌ |
 
 ## 🛠 Tech Stack
 | Layer | Technology |
@@ -32,22 +45,52 @@ A comprehensive MERN stack hostel management system built for managing rooms, re
 | Auth | JWT + bcrypt |
 | Deployment | Netlify + Render |
 
-## 🚀 Run Locally
+## 🚀 Setup & Run Locally
 
-### Backend
+### Prerequisites
+- Node.js v18+
+- MongoDB (local) or MongoDB Atlas account
+
+### Backend Setup
 ```bash
 cd server
 npm install
+# Create .env file with:
+# MONGO_URI=mongodb://localhost:27017/hostel-pro
+# JWT_SECRET=your_secret_key
+# PORT=5000
 npm run dev
 # Server runs on http://localhost:5000
 ```
 
-### Frontend
+### Frontend Setup
 ```bash
 cd client
 npm install
+# Create .env file with:
+# VITE_API_URL=http://localhost:5000/api
 npm run dev
 # App runs on http://localhost:5173
 ```
 
+### Seed Data
+```bash
+# After server is running, visit:
+http://localhost:5000/api/auth/seed-all
+```
+
 ## 📁 Project Structure
+```
+hostel-pro/
+├── server/
+│   ├── models/        # Room, Resident, Invoice, Maintenance
+│   ├── routes/        # Auth, Rooms, Residents, Billing, Reports
+│   ├── middleware/    # JWT auth + RBAC role check
+│   └── server.js
+└── client/
+    └── src/
+        ├── pages/     # Dashboard, Rooms, Residents, Billing etc.
+        ├── components/# Layout, Sidebar, Topbar
+        ├── context/   # Auth context
+        └── api/       # Axios instance
+```
