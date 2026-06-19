@@ -7,7 +7,7 @@ const roomSchema = new mongoose.Schema({
   status:    { type: String, enum: ['vacant', 'occupied', 'maintenance', 'reserved'], default: 'vacant' },
   price:     { type: Number, required: true },
   amenities: [{ type: String }],
-  residentId:{ type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  residentId:{ type: mongoose.Schema.Types.ObjectId, ref: 'Resident', default: null },
 }, { timestamps: true })
 
 module.exports = mongoose.model('Room', roomSchema)
