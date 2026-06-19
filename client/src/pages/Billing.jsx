@@ -253,13 +253,15 @@ export default function Billing() {
   const [payInvoice, setPayInvoice] = useState(null)
 
   const fetchAll = () => {
-    Promise.all([API.get('/invoices'), API.get('/residents')])
-      .then(([inv, res]) => { setInvoices(inv.data); setResidents(res.data) })
-      .catch(() => toast.error('Failed to load'))
-      .finally(() => setLoading(false))
-  }
+  API.get('/invoices')
+    .then(res => setInvoices(res.data))
+    .catch(() => toast.error('Failed to load invoices'))
+    .finally(() => setLoading(false))
 
-  useEffect(() => { fetchAll() }, [])
+  API.get('/residents')
+    .then(res => setResidents(res.data))
+    .catch(() => setResidents([])) // silently ignore for non-admin/staff roles
+}
 
   const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter)
 
