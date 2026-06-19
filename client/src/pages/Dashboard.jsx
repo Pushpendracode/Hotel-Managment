@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Users, DoorOpen, TrendingUp, Wrench } from 'lucide-react'
 import API from '../api/axios'
+import { useAuth } from '../context/AuthContext'
 
 const revenueData = [
   { month: 'Jan', revenue: 2.1 },
@@ -28,15 +29,20 @@ function MetricCard({ label, value, sub, subColor = 'text-gray-400', icon: Icon,
 }
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [rooms, setRooms]   = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (user?.role === 'resident') {
+      setLoading(false)
+      return
+    }
     API.get('/rooms')
       .then(res => setRooms(res.data))
       .catch(err => console.error(err))
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   const occupied    = rooms.filter(r => r.status === 'occupied').length
   const vacant      = rooms.filter(r => r.status === 'vacant').length
@@ -44,6 +50,21 @@ export default function Dashboard() {
   const occupancyRate = rooms.length ? Math.round((occupied / rooms.length) * 100) : 0
 
   const recentRooms = rooms.slice(0, 5)
+
+  if (user?.role === 'resident') {
+    return (
+      <div>
+        <div className="bg-white rounded-xl border border-gray-100 p-6 mb-4">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">
+            Welcome, {user?.name}
+          </h2>
+          <p className="text-sm text-gray-400">
+            Use the sidebar to submit maintenance requests or view your billing.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
