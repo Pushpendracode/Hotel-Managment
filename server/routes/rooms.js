@@ -3,16 +3,20 @@ const router  = express.Router()
 const Room    = require('../models/Room')
 const { verifyToken, checkRole } = require('../middleware/auth')
 
-// GET all rooms
+// GET all rooms — residents get limited fields, no resident names
 router.get('/', verifyToken, async (req, res) => {
   try {
+    if (req.user.role === 'resident') {
+      // Residents only see room number, floor, type, status — no resident info
+      const rooms = await Room.find().select('number floor type status price')
+      return res.json(rooms)
+    }
     const rooms = await Room.find().populate('residentId', 'name email')
     res.json(rooms)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 })
-
 // GET single room
 router.get('/:id', verifyToken, async (req, res) => {
   try {

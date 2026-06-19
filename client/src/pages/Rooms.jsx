@@ -3,6 +3,86 @@ import { Plus, X } from 'lucide-react'
 import API from '../api/axios'
 import toast from 'react-hot-toast'
 
+function AddRoomModal({ onClose, onAdd }) {
+  const [form, setForm] = useState({ number: '', floor: '1', type: 'single', price: '', amenities: 'WiFi,AC' })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!form.number || !form.price) return toast.error('Fill room number and price')
+    setSaving(true)
+    try {
+      await API.post('/rooms', {
+        number: form.number,
+        floor: Number(form.floor),
+        type: form.type,
+        price: Number(form.price),
+        amenities: form.amenities.split(',').map(a => a.trim()),
+        status: 'vacant'
+      })
+      toast.success('Room added!')
+      onAdd()
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add room')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold">Add New Room</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={16}/></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Room Number *</label>
+            <input value={form.number} onChange={e => setForm(f=>({...f,number:e.target.value}))}
+              placeholder="e.g. 101"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"/>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Floor</label>
+              <select value={form.floor} onChange={e => setForm(f=>({...f,floor:e.target.value}))}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                {[1,2,3,4].map(f => <option key={f} value={f}>Floor {f}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Type</label>
+              <select value={form.type} onChange={e => setForm(f=>({...f,type:e.target.value}))}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <option value="single">Single</option>
+                <option value="double">Double</option>
+                <option value="suite">Suite</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Price per month (₹) *</label>
+            <input type="number" value={form.price} onChange={e => setForm(f=>({...f,price:e.target.value}))}
+              placeholder="e.g. 5000"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"/>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose}
+            className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:bg-emerald-300">
+            {saving ? 'Adding…' : 'Add Room'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const statusColors = {
   occupied:    'bg-emerald-100 border-emerald-300 text-emerald-800',
   vacant:      'bg-gray-100 border-gray-200 text-gray-600',
@@ -124,6 +204,7 @@ export default function Rooms() {
   const [rooms, setRooms]       = useState([])
   const [loading, setLoading]   = useState(true)
   const [selected, setSelected] = useState(null)
+  const [showAddRoom, setShowAddRoom] = useState(false)
 
   const fetchRooms = () => {
     API.get('/rooms')
@@ -158,6 +239,14 @@ export default function Rooms() {
             <div className={`text-2xl font-semibold ${color}`}>{value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Add Room button */}
+      <div className="flex justify-end mb-4">
+        <button onClick={() => setShowAddRoom(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition">
+          <Plus size={16} />Add New Room
+        </button>
       </div>
 
       {/* Legend */}
@@ -201,6 +290,14 @@ export default function Rooms() {
           room={selected}
           onClose={() => setSelected(null)}
           onUpdate={fetchRooms}
+        />
+      )}
+
+      {/* Add Room modal */}
+      {showAddRoom && (
+        <AddRoomModal
+          onClose={() => setShowAddRoom(false)}
+          onAdd={fetchRooms}
         />
       )}
     </div>
