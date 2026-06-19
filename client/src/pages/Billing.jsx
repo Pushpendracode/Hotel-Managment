@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, X, CreditCard, Banknote } from 'lucide-react'
 import API from '../api/axios'
 import toast from 'react-hot-toast'
+import { useAuth } from '../context/AuthContext'
 
 const statusStyles = {
   paid:    'bg-emerald-50 text-emerald-700',
@@ -245,6 +246,7 @@ function PayModal({ invoice, onClose, onPay }) {
 }
 
 export default function Billing() {
+  const { user } = useAuth()
   const [invoices, setInvoices]     = useState([])
   const [residents, setResidents]   = useState([])
   const [filter, setFilter]         = useState('all')
@@ -253,15 +255,17 @@ export default function Billing() {
   const [payInvoice, setPayInvoice] = useState(null)
 
   const fetchAll = () => {
-  API.get('/invoices')
-    .then(res => setInvoices(res.data))
-    .catch(() => toast.error('Failed to load invoices'))
-    .finally(() => setLoading(false))
+    API.get('/invoices')
+      .then(res => setInvoices(res.data))
+      .catch(() => toast.error('Failed to load invoices'))
+      .finally(() => setLoading(false))
 
-  API.get('/residents')
-    .then(res => setResidents(res.data))
-    .catch(() => setResidents([])) // silently ignore for non-admin/staff roles
-}
+    API.get('/residents')
+      .then(res => setResidents(res.data))
+      .catch(() => setResidents([])) // silently ignore for non-admin/staff roles
+  }
+
+  useEffect(() => { fetchAll() }, [])
 
   const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter)
 
@@ -301,11 +305,13 @@ export default function Billing() {
               </button>
             ))}
           </div>
-          <button onClick={() => setShowGenerate(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white
-                       rounded-lg text-sm font-medium hover:bg-emerald-700 transition">
-            <Plus size={14} />Generate Invoice
-          </button>
+          {user?.role !== 'resident' && (
+            <button onClick={() => setShowGenerate(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white
+                         rounded-lg text-sm font-medium hover:bg-emerald-700 transition">
+              <Plus size={14} />Generate Invoice
+            </button>
+          )}
         </div>
       </div>
 
