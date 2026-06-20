@@ -48,9 +48,6 @@ router.post('/:id/pay', verifyToken, async (req, res) => {
 
     if (req.user.role === 'resident') {
       const resident = await Resident.findOne({ email: req.user.email })
-      console.log('DEBUG req.user.email:', req.user.email)
-      console.log('DEBUG resident found:', resident ? resident._id : 'NONE')
-      console.log('DEBUG invoice.residentId:', invoice.residentId)
       if (!resident || invoice.residentId.toString() !== resident._id.toString()) {
         return res.status(403).json({ message: 'Access denied' })
       }
