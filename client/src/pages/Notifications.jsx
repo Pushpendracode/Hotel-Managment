@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { Bell, CheckCheck, Wrench, Receipt, DoorOpen, AlertCircle } from "lucide-react"
 import API from "../api/axios"
 import toast from "react-hot-toast"
+import { useAuth } from "../context/AuthContext"
 
 const typeConfig = {
   maintenance: { icon: Wrench,       bg: "bg-amber-50",   text: "text-amber-600",  dot: "bg-amber-500" },
@@ -30,7 +31,8 @@ function timeAgo(date) {
 }
 
 export default function Notifications() {
-  const [notifs, setNotifs]   = useState(demoNotifs)
+  const { user } = useAuth()
+  const [notifs, setNotifs]   = useState(user?.role === 'resident' ? [] : demoNotifs)
   const [filter, setFilter]   = useState("all")
 
   const unread = notifs.filter(n => !n.read).length
@@ -55,6 +57,21 @@ export default function Notifications() {
     unread:      notifs.filter(n => !n.read).length,
     maintenance: notifs.filter(n => n.type === "maintenance").length,
     billing:     notifs.filter(n => n.type === "billing").length,
+  }
+
+  if (user?.role === 'resident') {
+    return (
+      <div>
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">
+            Notifications
+          </h2>
+          <p className="text-sm text-gray-400">
+            No notifications yet. You'll be notified here about updates to your maintenance requests and billing.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
