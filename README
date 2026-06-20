@@ -26,7 +26,7 @@ A comprehensive MERN stack hostel management system for managing rooms, resident
 | Feature | Admin | Staff | Resident |
 |---------|-------|-------|----------|
 | View all rooms | ✅ | ✅ | ❌ |
-| Create/Edit rooms | ✅ | ❌ | ❌ |
+| Create/Edit rooms | ✅ | ✅ | ❌ |
 | View all residents | ✅ | ✅ | ❌ |
 | View own profile | ✅ | ✅ | ✅ |
 | All maintenance requests | ✅ | ✅ | ❌ |
@@ -35,6 +35,10 @@ A comprehensive MERN stack hostel management system for managing rooms, resident
 | Own invoices only | ✅ | ✅ | ✅ |
 | Financial reports | ✅ | ❌ | ❌ |
 | User management | ✅ | ❌ | ❌ |
+
+## ⚠️ Known Limitations
+- **Notifications page** displays sample/demo alerts for admin and staff roles. It is not yet wired to a live backend feed — real-time notifications (maintenance updates, billing reminders) are a planned next step.
+- **Payment processing** is recorded manually (cash/UPI/card label only). There is no live integration with a payment gateway like Razorpay or Stripe yet — this is a planned next step for production use.
 
 ## 🛠 Tech Stack
 | Layer | Technology |
