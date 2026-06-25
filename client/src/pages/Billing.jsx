@@ -255,16 +255,18 @@ export default function Billing() {
   const [payInvoice, setPayInvoice] = useState(null)
 
   const fetchAll = () => {
-    API.get('/invoices')
-      .then(res => setInvoices(res.data))
-      .catch(() => toast.error('Failed to load invoices'))
-      .finally(() => setLoading(false))
+  API.get('/invoices')
+    .then(res => setInvoices(res.data))
+    .catch(() => toast.error('Failed to load invoices'))
+    .finally(() => setLoading(false))
 
+  // Only fetch the residents list if the user can actually use it
+  if (user?.role !== 'resident') {
     API.get('/residents')
       .then(res => setResidents(res.data))
-      .catch(() => setResidents([])) // silently ignore for non-admin/staff roles
+      .catch(() => setResidents([]))
   }
-
+}
   useEffect(() => { fetchAll() }, [])
 
   const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter)
