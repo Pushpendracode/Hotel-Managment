@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, Wrench } from 'lucide-react'
+import { Plus, X, Wrench, UserPlus } from 'lucide-react'
 import API from '../api/axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
@@ -106,6 +106,75 @@ function NewRequestModal({ onClose, onAdd, rooms }) {
   )
 }
 
+function AssignModal({ request, onClose, onAssign }) {
+  const [assignedTo, setAssignedTo] = useState(request.assignedTo || '')
+  const [saving, setSaving] = useState(false)
+
+  const staffSuggestions = ['Suresh T.', 'Ravi M.', 'IT Team', 'Housekeeping']
+
+  const handleSubmit = async () => {
+    if (!assignedTo.trim()) return toast.error('Enter a name to assign')
+    setSaving(true)
+    try {
+      await API.put(`/maintenance/${request._id}/assign`, { assignedTo: assignedTo.trim() })
+      toast.success('Request assigned!')
+      onAssign()
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to assign')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold">Assign Personnel</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={16}/></button>
+        </div>
+
+        <div className="bg-gray-50 rounded-xl p-3 mb-4">
+          <div className="text-xs text-gray-400 mb-0.5">Issue</div>
+          <div className="text-sm font-medium text-gray-800">{request.issue}</div>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Assign to *</label>
+            <input value={assignedTo} onChange={e => setAssignedTo(e.target.value)}
+              placeholder="Enter staff name"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {staffSuggestions.map(name => (
+              <button key={name} onClick={() => setAssignedTo(name)}
+                className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600
+                           hover:bg-gray-50 transition">
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <button onClick={onClose}
+            className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm
+                       font-medium hover:bg-emerald-700 disabled:bg-emerald-300">
+            {saving ? 'Assigning…' : 'Assign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Maintenance() {
   const { user } = useAuth()
   const [requests, setRequests] = useState([])
@@ -113,6 +182,7 @@ export default function Maintenance() {
   const [filter, setFilter]     = useState('all')
   const [loading, setLoading]   = useState(true)
   const [showAdd, setShowAdd]   = useState(false)
+  const [assignTarget, setAssignTarget] = useState(null)
 
   const fetchAll = () => {
     Promise.all([API.get('/maintenance'), API.get('/rooms')])
@@ -235,6 +305,12 @@ export default function Maintenance() {
                   <td className="py-3 px-4">
                     {user?.role !== 'resident' && req.status !== 'completed' && (
                       <div className="flex gap-1">
+                        <button onClick={() => setAssignTarget(req)}
+                          className="text-xs px-2 py-1 bg-blue-50 text-blue-700
+                                     rounded-lg hover:bg-blue-100 transition flex items-center gap-1">
+                          <UserPlus size={12} />
+                          {req.assignedTo ? 'Reassign' : 'Assign'}
+                        </button>
                         {req.status === 'open' && (
                           <button onClick={() => handleStatusUpdate(req._id, 'inprogress')}
                             className="text-xs px-2 py-1 bg-amber-50 text-amber-700
@@ -264,6 +340,14 @@ export default function Maintenance() {
           onClose={() => setShowAdd(false)}
           onAdd={fetchAll}
           rooms={rooms}
+        />
+      )}
+
+      {assignTarget && (
+        <AssignModal
+          request={assignTarget}
+          onClose={() => setAssignTarget(null)}
+          onAssign={fetchAll}
         />
       )}
     </div>
