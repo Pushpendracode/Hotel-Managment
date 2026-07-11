@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, X, Phone, Mail, Home } from 'lucide-react'
+import { Search, Plus, X } from 'lucide-react'
 import API from '../api/axios'
 import toast from 'react-hot-toast'
 
@@ -14,13 +14,28 @@ function AddResidentModal({ onClose, onAdd, vacantRooms }) {
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
 
   const handleSubmit = async () => {
-    if (!form.name || !form.email || !form.roomId || !form.checkIn) {
-      return toast.error('Fill in all required fields')
-    }
+    // Validation
+    if (!form.name.trim())  return toast.error('Name is required')
+    if (!form.email.trim()) return toast.error('Email is required')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      return toast.error('Enter a valid email address')
+    if (!form.roomId)       return toast.error('Please select a room')
+    if (!form.checkIn)      return toast.error('Check-in date is required')
+    if (form.checkOut && form.checkOut <= form.checkIn)
+      return toast.error('Check-out must be after check-in')
+
     setSaving(true)
     try {
-      await API.post('/residents', form)
-      toast.success('Resident added!')
+      const result = await API.post('/residents', form)
+      const creds  = result.data.loginCredentials
+      if (creds) {
+        toast.success(
+          `Resident added! Login: ${creds.email} / ${creds.defaultPassword}`,
+          { duration: 6000 }
+        )
+      } else {
+        toast.success('Resident added!')
+      }
       onAdd()
       onClose()
     } catch (err) {
@@ -40,17 +55,26 @@ function AddResidentModal({ onClose, onAdd, vacantRooms }) {
           </button>
         </div>
 
+        <div className="bg-blue-50 rounded-lg px-3 py-2 mb-4 text-xs text-blue-700">
+          A login account will be automatically created for this resident.
+          Default password will be their phone number, or "resident123" if no phone is provided.
+        </div>
+
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Full Name *</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                Full Name <span className="text-red-400">*</span>
+              </label>
               <input value={form.name} onChange={e => set('name', e.target.value)}
                 placeholder="Rajesh Kumar"
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
                            focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Email *</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                Email <span className="text-red-400">*</span>
+              </label>
               <input value={form.email} onChange={e => set('email', e.target.value)}
                 type="email" placeholder="rajesh@email.com"
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
@@ -65,16 +89,19 @@ function AddResidentModal({ onClose, onAdd, vacantRooms }) {
                 placeholder="+91 98765 43210"
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
                            focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Used as default login password</p>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Assign Room *</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                Assign Room <span className="text-red-400">*</span>
+              </label>
               <select value={form.roomId} onChange={e => set('roomId', e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
                            focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="">Select a room</option>
                 {vacantRooms.map(r => (
                   <option key={r._id} value={r._id}>
-                    Room {r.number} — {r.type} — ₹{r.price.toLocaleString()}/mo
+                    Room {r.number} — {r.type} — ₹{r.price?.toLocaleString()}/mo
                   </option>
                 ))}
               </select>
@@ -83,7 +110,9 @@ function AddResidentModal({ onClose, onAdd, vacantRooms }) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Check-in Date *</label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                Check-in Date <span className="text-red-400">*</span>
+              </label>
               <input value={form.checkIn} onChange={e => set('checkIn', e.target.value)}
                 type="date"
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
@@ -125,7 +154,8 @@ function AddResidentModal({ onClose, onAdd, vacantRooms }) {
 
         <div className="flex gap-2 mt-6">
           <button onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+            className="flex-1 py-2 rounded-lg border border-gray-200
+                       text-sm text-gray-600 hover:bg-gray-50">
             Cancel
           </button>
           <button onClick={handleSubmit} disabled={saving}
@@ -192,12 +222,12 @@ export default function Residents() {
   return (
     <div>
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {[
-          { label: 'Total Residents', value: residents.length, color: 'text-gray-800' },
-          { label: 'Active',  value: residents.filter(r => r.status === 'active').length,  color: 'text-emerald-600' },
-          { label: 'Pending', value: residents.filter(r => r.status === 'pending').length, color: 'text-amber-600' },
-          { label: 'Checked Out', value: residents.filter(r => r.status === 'checkedout').length, color: 'text-gray-400' },
+          { label: 'Total Residents', value: residents.length,                                          color: 'text-gray-800' },
+          { label: 'Active',          value: residents.filter(r => r.status === 'active').length,      color: 'text-emerald-600' },
+          { label: 'Pending',         value: residents.filter(r => r.status === 'pending').length,     color: 'text-amber-600' },
+          { label: 'Checked Out',     value: residents.filter(r => r.status === 'checkedout').length,  color: 'text-gray-400' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-4">
             <div className="text-xs text-gray-400 mb-1">{label}</div>
@@ -208,8 +238,8 @@ export default function Residents() {
 
       {/* Filters + Search */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex gap-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex gap-1 flex-wrap">
             {['all', 'active', 'pending', 'checkedout'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition
@@ -241,7 +271,7 @@ export default function Residents() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
         {loading ? (
           <div className="text-center py-16 text-sm text-gray-400">Loading residents…</div>
         ) : filtered.length === 0 ? (
