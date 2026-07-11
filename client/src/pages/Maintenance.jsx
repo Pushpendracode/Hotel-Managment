@@ -23,19 +23,21 @@ const statusLabel = {
 }
 
 function NewRequestModal({ onClose, onAdd, rooms }) {
+  const { user } = useAuth()
   const [form, setForm] = useState({ issue: '', priority: 'medium', roomId: '' })
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async () => {
-    if (!form.issue) return toast.error('Describe the issue')
+    if (!form.issue.trim()) return toast.error('Describe the issue')
+    if (user?.role !== 'resident' && !form.roomId) return toast.error('Please select a room')
     setSaving(true)
     try {
       await API.post('/maintenance', form)
       toast.success('Request submitted!')
       onAdd()
       onClose()
-    } catch {
-      toast.error('Failed to submit')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit')
     } finally {
       setSaving(false)
     }
@@ -52,20 +54,31 @@ function NewRequestModal({ onClose, onAdd, rooms }) {
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Room</label>
-            <select value={form.roomId} onChange={e => setForm(f => ({ ...f, roomId: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              <option value="">Select room (optional)</option>
-              {rooms.map(r => (
-                <option key={r._id} value={r._id}>Room {r.number} — Floor {r.floor}</option>
-              ))}
-            </select>
-          </div>
+          {/* Room selector — hidden for residents, auto-assigned on backend */}
+          {user?.role !== 'resident' ? (
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                Room <span className="text-red-400">*</span>
+              </label>
+              <select value={form.roomId} onChange={e => setForm(f => ({ ...f, roomId: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <option value="">Select room</option>
+                {rooms.map(r => (
+                  <option key={r._id} value={r._id}>Room {r.number} — Floor {r.floor}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700">
+              This request will be filed for your assigned room automatically.
+            </div>
+          )}
 
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Issue Description *</label>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">
+              Issue Description <span className="text-red-400">*</span>
+            </label>
             <textarea value={form.issue} onChange={e => setForm(f => ({ ...f, issue: e.target.value }))}
               rows={3} placeholder="Describe the issue in detail…"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none
@@ -108,9 +121,16 @@ function NewRequestModal({ onClose, onAdd, rooms }) {
 
 function AssignModal({ request, onClose, onAssign }) {
   const [assignedTo, setAssignedTo] = useState(request.assignedTo || '')
-  const [saving, setSaving] = useState(false)
+  const [staffList, setStaffList]   = useState([])
+  const [saving, setSaving]         = useState(false)
 
-  const staffSuggestions = ['Suresh T.', 'Ravi M.', 'IT Team', 'Housekeeping']
+  useEffect(() => {
+    API.get('/auth/users')
+      .then(res => setStaffList(
+        res.data.filter(u => u.role === 'staff' || u.role === 'admin')
+      ))
+      .catch(() => setStaffList([]))
+  }, [])
 
   const handleSubmit = async () => {
     if (!assignedTo.trim()) return toast.error('Enter a name to assign')
@@ -132,31 +152,46 @@ function AssignModal({ request, onClose, onAssign }) {
       <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold">Assign Personnel</h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={16}/></button>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <X size={16}/>
+          </button>
         </div>
 
         <div className="bg-gray-50 rounded-xl p-3 mb-4">
           <div className="text-xs text-gray-400 mb-0.5">Issue</div>
           <div className="text-sm font-medium text-gray-800">{request.issue}</div>
+          {request.roomId && (
+            <div className="text-xs text-gray-400 mt-1">Room {request.roomId.number}</div>
+          )}
         </div>
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Assign to *</label>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">
+              Assign to <span className="text-red-400">*</span>
+            </label>
             <input value={assignedTo} onChange={e => setAssignedTo(e.target.value)}
               placeholder="Enter staff name"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
                          focus:outline-none focus:ring-2 focus:ring-emerald-500" />
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {staffSuggestions.map(name => (
-              <button key={name} onClick={() => setAssignedTo(name)}
-                className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600
-                           hover:bg-gray-50 transition">
-                {name}
-              </button>
-            ))}
-          </div>
+
+          {staffList.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-400 mb-1.5">Quick assign from staff:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {staffList.map(s => (
+                  <button key={s._id} onClick={() => setAssignedTo(s.name)}
+                    className={`text-xs px-2 py-1 rounded-md border transition
+                      ${assignedTo === s.name
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 mt-6">
@@ -177,11 +212,11 @@ function AssignModal({ request, onClose, onAssign }) {
 
 export default function Maintenance() {
   const { user } = useAuth()
-  const [requests, setRequests] = useState([])
-  const [rooms, setRooms]       = useState([])
-  const [filter, setFilter]     = useState('all')
-  const [loading, setLoading]   = useState(true)
-  const [showAdd, setShowAdd]   = useState(false)
+  const [requests, setRequests]     = useState([])
+  const [rooms, setRooms]           = useState([])
+  const [filter, setFilter]         = useState('all')
+  const [loading, setLoading]       = useState(true)
+  const [showAdd, setShowAdd]       = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
 
   const fetchAll = () => {
@@ -217,12 +252,12 @@ export default function Maintenance() {
   return (
     <div>
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {[
-          { label: 'Open',        value: stats.open,       color: 'text-red-600' },
-          { label: 'In Progress', value: stats.inprogress, color: 'text-amber-600' },
-          { label: 'Completed',   value: stats.completed,  color: 'text-emerald-600' },
-          { label: 'High Priority', value: stats.high,     color: 'text-red-500' },
+          { label: 'Open',          value: stats.open,       color: 'text-red-600' },
+          { label: 'In Progress',   value: stats.inprogress, color: 'text-amber-600' },
+          { label: 'Completed',     value: stats.completed,  color: 'text-emerald-600' },
+          { label: 'High Priority', value: stats.high,       color: 'text-red-500' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-4">
             <div className="text-xs text-gray-400 mb-1">{label}</div>
@@ -233,7 +268,7 @@ export default function Maintenance() {
 
       {/* Filters + Add */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex gap-1 flex-wrap">
             {['all','open','inprogress','completed','high','medium','low'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
@@ -254,7 +289,7 @@ export default function Maintenance() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
         {loading ? (
           <div className="text-center py-16 text-sm text-gray-400">Loading…</div>
         ) : filtered.length === 0 ? (
@@ -266,7 +301,7 @@ export default function Maintenance() {
           <table className="w-full">
             <thead className="border-b border-gray-50">
               <tr>
-                {['#', 'Room', 'Issue', 'Priority', 'Assigned To', 'Date', 'Status', 'Actions'].map(h => (
+                {['#','Room','Issue','Priority','Assigned To','Date','Status','Actions'].map(h => (
                   <th key={h} className="text-left text-xs font-medium text-gray-400
                                          uppercase tracking-wide py-3 px-4">{h}</th>
                 ))}
@@ -304,7 +339,7 @@ export default function Maintenance() {
                   </td>
                   <td className="py-3 px-4">
                     {user?.role !== 'resident' && req.status !== 'completed' && (
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 flex-wrap">
                         <button onClick={() => setAssignTarget(req)}
                           className="text-xs px-2 py-1 bg-blue-50 text-blue-700
                                      rounded-lg hover:bg-blue-100 transition flex items-center gap-1">
