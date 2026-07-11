@@ -2,6 +2,7 @@ const express  = require('express')
 const router   = express.Router()
 const Resident = require('../models/Resident')
 const Room     = require('../models/Room')
+const mongoose = require('mongoose')
 const { verifyToken, checkRole } = require('../middleware/auth')
 
 // GET all residents — admin/staff only
@@ -28,13 +29,39 @@ router.get('/me', verifyToken, async (req, res) => {
 // POST add resident — admin/staff only
 router.post('/', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
-    const { roomId } = req.body
+    const { roomId, email, name, phone } = req.body
+
     const room = await Room.findById(roomId)
     if (!room) return res.status(404).json({ message: 'Room not found' })
     if (room.status !== 'vacant') return res.status(400).json({ message: 'Room is not vacant' })
+
     const resident = await Resident.create(req.body)
     await Room.findByIdAndUpdate(roomId, { status: 'occupied', residentId: resident._id })
-    res.status(201).json(resident)
+
+    // Auto-create a user login for this resident
+    const bcrypt = require('bcryptjs')
+    const db = mongoose.connection.db
+    const existing = await db.collection('users').findOne({ email })
+    if (!existing) {
+      const defaultPassword = phone || 'resident123'
+      const hashed = await bcrypt.hash(defaultPassword, 10)
+      await db.collection('users').insertOne({
+        name, email,
+        password: hashed,
+        role: 'resident',
+        isActive: true,
+        createdAt: new Date()
+      })
+    }
+
+    res.status(201).json({
+      resident,
+      loginCredentials: {
+        email,
+        defaultPassword: phone || 'resident123',
+        message: 'A login account has been created for this resident'
+      }
+    })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
