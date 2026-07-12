@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { Users, DoorOpen, TrendingUp, Wrench } from 'lucide-react'
 import API from '../api/axios'
 import { useAuth } from '../context/AuthContext'
+import ResidentDashboard from './ResidentDashboard'
 
 const revenueData = [
   { month: 'Jan', revenue: 2.1 },
@@ -51,19 +52,9 @@ export default function Dashboard() {
 
   const recentRooms = rooms.slice(0, 5)
 
+  // Resident role gets its own dedicated dashboard component
   if (user?.role === 'resident') {
-    return (
-      <div>
-        <div className="bg-white rounded-xl border border-gray-100 p-6 mb-4">
-          <h2 className="text-base font-semibold text-gray-900 mb-1">
-            Welcome, {user?.name}
-          </h2>
-          <p className="text-sm text-gray-400">
-            Use the sidebar to submit maintenance requests or view your billing.
-          </p>
-        </div>
-      </div>
-    )
+    return <ResidentDashboard />
   }
 
   return (

@@ -1,6 +1,7 @@
 const express     = require('express')
 const router      = express.Router()
 const Maintenance = require('../models/Maintenance')
+const Resident    = require('../models/Resident')
 const { verifyToken, checkRole } = require('../middleware/auth')
 
 // GET — residents see only their own
@@ -10,9 +11,13 @@ router.get('/', verifyToken, async (req, res) => {
     const filter = {}
     if (status)   filter.status   = status
     if (priority) filter.priority = priority
+
     if (req.user.role === 'resident') {
-      filter.residentId = req.user._id
+      const resident = await Resident.findOne({ email: req.user.email })
+      if (!resident) return res.json([])
+      filter.residentId = resident._id
     }
+
     const requests = await Maintenance.find(filter)
       .populate('roomId', 'number floor')
       .populate('residentId', 'name')
@@ -23,12 +28,29 @@ router.get('/', verifyToken, async (req, res) => {
   }
 })
 
-// POST create
+// POST create — residents can only file for their own room
 router.post('/', verifyToken, async (req, res) => {
   try {
+    let residentId = req.body.residentId
+    let roomId = req.body.roomId
+
+    if (req.user.role === 'resident') {
+      const resident = await Resident.findOne({ email: req.user.email })
+      if (!resident) {
+        return res.status(403).json({ message: 'No resident profile linked to this account' })
+      }
+      if (!resident.roomId) {
+        return res.status(400).json({ message: 'You have no room assigned yet' })
+      }
+      // Force both values server-side — never trust the client for these
+      residentId = resident._id
+      roomId = resident.roomId
+    }
+
     const request = await Maintenance.create({
       ...req.body,
-      residentId: req.user._id
+      residentId,
+      roomId,
     })
     res.status(201).json(request)
   } catch (err) {
