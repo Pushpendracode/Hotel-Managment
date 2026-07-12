@@ -6,7 +6,11 @@ const maintenanceSchema = new mongoose.Schema({
   issue:      { type: String, required: true },
   priority:   { type: String, enum: ['low','medium','high'], default: 'medium' },
   status:     { type: String, enum: ['open','inprogress','completed'], default: 'open' },
-  assignedTo: { type: String, default: '' },
+
+  // assignedTo can point to either a User (specific staff) or a Team (department)
+  assignedToType: { type: String, enum: ['User', 'Team', null], default: null },
+  assignedTo:     { type: mongoose.Schema.Types.ObjectId, refPath: 'assignedToType', default: null },
+
   notes:      { type: String, default: '' },
 }, { timestamps: true })
 

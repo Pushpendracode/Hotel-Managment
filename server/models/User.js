@@ -8,6 +8,12 @@ const userSchema = new mongoose.Schema({
   role:     { type: String, enum: ['admin', 'staff', 'resident'], default: 'resident' },
   phone:    { type: String },
   isActive: { type: Boolean, default: true },
+  // Only meaningful when role === 'staff'
+  department: {
+    type: String,
+    enum: ['Housekeeping', 'IT', 'Maintenance', 'Front Desk', null],
+    default: null,
+  },
 }, { timestamps: true })
 
 // Hash password before saving
