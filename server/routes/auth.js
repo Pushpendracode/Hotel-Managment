@@ -55,7 +55,7 @@ router.get('/me', async (req, res) => {
   }
 })
 
-// GET all users (admin only)
+// GET all users
 router.get('/users', async (req, res) => {
   try {
     const db    = mongoose.connection.db
@@ -92,7 +92,7 @@ router.get('/check-env', (req, res) => {
 // GET seed all data
 router.get('/seed-all', async (req, res) => {
   try {
-    const uri  = process.env.MONGO_URI
+    const uri = process.env.MONGO_URI
     if (!uri) return res.status(500).json({ message: 'MONGO_URI not set' })
     const conn = await mongoose.createConnection(uri).asPromise()
     const db   = conn.db
@@ -109,64 +109,106 @@ router.get('/seed-all', async (req, res) => {
     await db.collection('rooms').deleteMany({})
     const types    = ['single','single','double','single','single','double','single','suite']
     const prices   = [5000,5000,8000,5000,5000,8000,5000,12000]
-    const statuses = ['occupied','occupied','vacant','occupied','vacant','occupied','occupied','occupied']
     const roomDocs = []
     for (let floor = 1; floor <= 4; floor++) {
       for (let i = 0; i < 8; i++) {
         roomDocs.push({
           number: String(floor * 100 + i + 1),
-          floor, type: types[i], status: statuses[i],
-          price: prices[i], amenities: ['WiFi','AC'],
-          residentId: null, createdAt: new Date()
+          floor, type: types[i],
+          status: 'vacant',
+          price: prices[i],
+          amenities: ['WiFi','AC'],
+          residentId: null,
+          createdAt: new Date()
         })
       }
     }
     const insertedRooms = await db.collection('rooms').insertMany(roomDocs)
     const roomIds = Object.values(insertedRooms.insertedIds)
 
-    // Residents
+    // Residents — resident@hostelpro.com is FIRST so test account always has a profile
     await db.collection('residents').deleteMany({})
     const residentData = [
-      { name:'Rajesh Kumar', email:'rajesh@email.com', phone:'+91 98765 43210' },
-      { name:'Priya Sharma', email:'priya@email.com',  phone:'+91 87654 32109' },
-      { name:'Amit Mehta',   email:'amit@email.com',   phone:'+91 76543 21098' },
-      { name:'Vikram Nair',  email:'vikram@email.com', phone:'+91 65432 10987' },
-      { name:'Sneha Verma',  email:'sneha@email.com',  phone:'+91 54321 09876' },
-      { name:'Kavya Pillai', email:'kavya@email.com',  phone:'+91 43210 98765' },
+      { name:'Resident User', email:'resident@hostelpro.com', phone:'res123' },
+      { name:'Rajesh Kumar',  email:'rajesh@email.com',       phone:'+91 98765 43210' },
+      { name:'Priya Sharma',  email:'priya@email.com',        phone:'+91 87654 32109' },
+      { name:'Amit Mehta',    email:'amit@email.com',         phone:'+91 76543 21098' },
+      { name:'Vikram Nair',   email:'vikram@email.com',       phone:'+91 65432 10987' },
+      { name:'Sneha Verma',   email:'sneha@email.com',        phone:'+91 54321 09876' },
     ]
     const residentDocs = residentData.map((r, i) => ({
-      ...r, roomId: roomIds[i],
+      ...r,
+      roomId:   roomIds[i],
       checkIn:  new Date(2026, 4, i + 1),
       checkOut: new Date(2026, 10, i + 1),
-      status: 'active',
+      status:   'active',
       emergencyContact: { name:'Emergency', phone:'+91 99999 00000' },
       createdAt: new Date()
     }))
     const insertedResidents = await db.collection('residents').insertMany(residentDocs)
     const residentIds = Object.values(insertedResidents.insertedIds)
 
+    // Mark rooms as occupied for each resident
+    for (let i = 0; i < residentData.length; i++) {
+      await db.collection('rooms').updateOne(
+        { _id: roomIds[i] },
+        { $set: { status: 'occupied', residentId: residentIds[i] } }
+      )
+    }
+
     // Maintenance
     await db.collection('maintenances').deleteMany({})
     await db.collection('maintenances').insertMany([
-      { issue:'AC not cooling properly',    priority:'high',   status:'open',       assignedTo:'Suresh T.', roomId:roomIds[0], createdAt:new Date() },
-      { issue:'Bathroom light not working', priority:'medium', status:'inprogress', assignedTo:'Ravi M.',   roomId:roomIds[1], createdAt:new Date() },
-      { issue:'Leaking tap in washroom',    priority:'medium', status:'inprogress', assignedTo:'Ravi M.',   roomId:roomIds[2], createdAt:new Date() },
-      { issue:'WiFi connectivity issue',    priority:'low',    status:'open',       assignedTo:'',          roomId:roomIds[3], createdAt:new Date() },
-      { issue:'Door lock broken',           priority:'high',   status:'completed',  assignedTo:'Suresh T.', roomId:roomIds[4], createdAt:new Date() },
+      { issue:'AC not cooling properly',    priority:'high',   status:'open',       assignedTo:'Staff Member', roomId:roomIds[0], residentId:residentIds[0], createdAt:new Date() },
+      { issue:'Bathroom light not working', priority:'medium', status:'inprogress', assignedTo:'Staff Member', roomId:roomIds[1], residentId:residentIds[1], createdAt:new Date() },
+      { issue:'Leaking tap in washroom',    priority:'medium', status:'inprogress', assignedTo:'Staff Member', roomId:roomIds[2], residentId:residentIds[2], createdAt:new Date() },
+      { issue:'WiFi connectivity issue',    priority:'low',    status:'open',       assignedTo:'',             roomId:roomIds[3], residentId:residentIds[3], createdAt:new Date() },
+      { issue:'Door lock broken',           priority:'high',   status:'completed',  assignedTo:'Staff Member', roomId:roomIds[4], residentId:residentIds[4], createdAt:new Date() },
     ])
 
     // Invoices
     await db.collection('invoices').deleteMany({})
     await db.collection('invoices').insertMany([
-      { residentId:residentIds[0], lineItems:[{description:'Room Rent',amount:5000},{description:'Electricity',amount:1200},{description:'Water',amount:300}],   discount:0,   lateFee:0,   total:6500,  dueDate:new Date(2026,5,5),  status:'paid',    paymentHistory:[{amount:6500, method:'upi',  paidAt:new Date()}], createdAt:new Date() },
-      { residentId:residentIds[1], lineItems:[{description:'Room Rent',amount:8000},{description:'AC',amount:800},{description:'Laundry',amount:400}],            discount:0,   lateFee:0,   total:9200,  dueDate:new Date(2026,5,5),  status:'paid',    paymentHistory:[{amount:9200, method:'cash', paidAt:new Date()}], createdAt:new Date() },
-      { residentId:residentIds[2], lineItems:[{description:'Room Rent',amount:5000},{description:'Electricity',amount:900}],                                      discount:0,   lateFee:500, total:6400,  dueDate:new Date(2026,4,31), status:'overdue', paymentHistory:[], createdAt:new Date() },
+      { residentId:residentIds[0], lineItems:[{description:'Room Rent',amount:5000},{description:'Electricity',amount:1200},{description:'Water',amount:300}],   discount:0,   lateFee:0,   total:6500,  dueDate:new Date(2026,5,5),  status:'pending', paymentHistory:[], createdAt:new Date() },
+      { residentId:residentIds[1], lineItems:[{description:'Room Rent',amount:5000},{description:'Electricity',amount:900}],                                      discount:0,   lateFee:0,   total:5900,  dueDate:new Date(2026,5,5),  status:'paid',    paymentHistory:[{amount:5900,method:'cash',paidAt:new Date()}], createdAt:new Date() },
+      { residentId:residentIds[2], lineItems:[{description:'Room Rent',amount:8000},{description:'AC',amount:800},{description:'Laundry',amount:400}],            discount:0,   lateFee:500, total:9700,  dueDate:new Date(2026,4,31), status:'overdue', paymentHistory:[], createdAt:new Date() },
       { residentId:residentIds[3], lineItems:[{description:'Room Rent',amount:5000},{description:'Electricity',amount:1100},{description:'Water',amount:300}],    discount:200, lateFee:0,   total:6200,  dueDate:new Date(2026,5,10), status:'pending', paymentHistory:[], createdAt:new Date() },
-      { residentId:residentIds[4], lineItems:[{description:'Suite Rent',amount:12000},{description:'AC',amount:1000},{description:'Services',amount:500}],        discount:500, lateFee:0,   total:13000, dueDate:new Date(2026,5,10), status:'partial', paymentHistory:[{amount:5000,method:'card',paidAt:new Date()}], createdAt:new Date() },
+      { residentId:residentIds[4], lineItems:[{description:'Room Rent',amount:5000},{description:'Electricity',amount:1100}],                                     discount:0,   lateFee:0,   total:6100,  dueDate:new Date(2026,5,10), status:'partial', paymentHistory:[{amount:3000,method:'upi',paidAt:new Date()}], createdAt:new Date() },
     ])
 
     await conn.close()
-    res.json({ message:'✅ All data seeded! Users + Rooms + Residents + Maintenance + Invoices created.' })
+    res.json({ message:'✅ All data seeded! resident@hostelpro.com now has a resident profile linked to Room 101.' })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+// GET seed test resident only
+router.get('/seed-test-resident', async (req, res) => {
+  try {
+    const db   = mongoose.connection.db
+    const room = await db.collection('rooms').findOne({ status: 'vacant' })
+    if (!room) return res.status(400).json({ message: 'No vacant rooms available — run seed-all first' })
+
+    await db.collection('residents').deleteOne({ email: 'resident@hostelpro.com' })
+    const result = await db.collection('residents').insertOne({
+      name:     'Resident User',
+      email:    'resident@hostelpro.com',
+      phone:    'res123',
+      roomId:   room._id,
+      checkIn:  new Date(),
+      checkOut: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      status:   'active',
+      emergencyContact: { name:'Emergency', phone:'+91 99999 00000' },
+      createdAt: new Date()
+    })
+
+    await db.collection('rooms').updateOne(
+      { _id: room._id },
+      { $set: { status: 'occupied', residentId: result.insertedId } }
+    )
+
+    res.json({ message: `✅ Resident profile created for resident@hostelpro.com — assigned to Room ${room.number}` })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
