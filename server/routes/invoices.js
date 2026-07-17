@@ -86,8 +86,8 @@ const { verifyToken, checkRole } = require('../middleware/auth')
       if (!invoice) return res.status(404).json({ message: 'Invoice not found' })
 
       const razorpay = new Razorpay({
-        key_id:     process.env.RAZORPAY_KEY_ID,
-        key_secret: process.env.RAZORPAY_KEY_SECRET,
+        key_id:     process.env.rzp_test_TERRqKUtN9PKZf,
+        key_secret: process.env.Jgg9z38fk7wQaSeYXgMYRMXE,
       })
 
       const order = await razorpay.orders.create({
@@ -110,7 +110,7 @@ const { verifyToken, checkRole } = require('../middleware/auth')
       // Verify signature
       const body      = razorpay_order_id + '|' + razorpay_payment_id
       const expected  = crypto
-        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+        .createHmac('sha256', process.env.Jgg9z38fk7wQaSeYXgMYRMXE)
         .update(body)
         .digest('hex')
 
