@@ -77,8 +77,7 @@ const { verifyToken, checkRole } = require('../middleware/auth')
     }
   })
 
-  const Razorpay = require('razorpay')
-  const crypto   = require('crypto')
+  
 
   // POST create Razorpay order
   router.post('/:id/create-order', verifyToken, async (req, res) => {
