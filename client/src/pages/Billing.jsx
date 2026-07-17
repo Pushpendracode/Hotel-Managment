@@ -197,11 +197,50 @@ function GenerateModal({ onClose, onGenerate, residents }) {
 }
 
 function PayModal({ invoice, onClose, onPay }) {
-  const [amount, setAmount] = useState(invoice.total)
-  const [method, setMethod] = useState('cash')
-  const [saving, setSaving] = useState(false)
+  const [amount, setAmount]   = useState(invoice.total)
+  const [method, setMethod]   = useState('cash')
+  const [saving, setSaving]   = useState(false)
 
-  const handlePay = async () => {
+  const handleRazorpay = async () => {
+    setSaving(true)
+    try {
+      // Create order
+      const { data } = await API.post(`/invoices/${invoice._id}/create-order`)
+
+      const options = {
+        key:         import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount:      data.amount,
+        currency:    data.currency,
+        name:        'HostelPro',
+        description: `Invoice payment for ${invoice.residentId?.name}`,
+        order_id:    data.orderId,
+        handler: async (response) => {
+          try {
+            await API.post(`/invoices/${invoice._id}/verify-payment`, response)
+            toast.success('Payment successful!')
+            onPay()
+            onClose()
+          } catch {
+            toast.error('Payment verification failed')
+          }
+        },
+        prefill: {
+          name:  invoice.residentId?.name,
+          email: invoice.residentId?.email,
+        },
+        theme: { color: '#059669' }
+      }
+
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+    } catch (err) {
+      toast.error('Failed to initiate payment')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleManualPay = async () => {
     if (!amount || Number(amount) <= 0) return toast.error('Enter a valid amount')
     setSaving(true)
     try {
@@ -234,7 +273,25 @@ function PayModal({ invoice, onClose, onPay }) {
           <div className="text-xs text-gray-400 mt-1">{invoice.residentId?.name}</div>
         </div>
 
-        <div className="space-y-4">
+        {/* Razorpay option */}
+        <button onClick={handleRazorpay} disabled={saving}
+          className="w-full py-2.5 mb-3 rounded-lg bg-blue-600 text-white text-sm
+                     font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2
+                     disabled:bg-blue-300">
+          <CreditCard size={16} />
+          Pay Online via Razorpay
+        </button>
+
+        <div className="relative mb-3">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200"></div>
+          </div>
+          <div className="relative flex justify-center text-xs text-gray-400 bg-white px-2">
+            or pay manually
+          </div>
+        </div>
+
+        <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">Amount (₹)</label>
             <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
@@ -242,36 +299,32 @@ function PayModal({ invoice, onClose, onPay }) {
                          focus:outline-none focus:ring-2 focus:ring-emerald-500" />
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-2 block">Payment Method</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'cash', icon: Banknote,    label: 'Cash' },
-                { id: 'upi',  icon: CreditCard,  label: 'UPI' },
-                { id: 'bank', icon: CreditCard,  label: 'Bank Transfer' },
-                { id: 'card', icon: CreditCard,  label: 'Card' },
-              ].map(({ id, icon: Icon, label }) => (
-                <button key={id} onClick={() => setMethod(id)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition
-                    ${method === id
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                  <Icon size={14}/>{label}
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: 'cash', label: 'Cash' },
+              { id: 'upi',  label: 'UPI' },
+              { id: 'bank', label: 'Bank' },
+            ].map(({ id, label }) => (
+              <button key={id} onClick={() => setMethod(id)}
+                className={`py-2 rounded-lg border text-xs font-medium transition
+                  ${method === id
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex gap-2 mt-6">
+        <div className="flex gap-2 mt-4">
           <button onClick={onClose}
             className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
             Cancel
           </button>
-          <button onClick={handlePay} disabled={saving}
+          <button onClick={handleManualPay} disabled={saving}
             className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm
                        font-medium hover:bg-emerald-700 disabled:bg-emerald-300">
-            {saving ? 'Processing…' : 'Confirm Payment'}
+            {saving ? 'Processing…' : 'Record Payment'}
           </button>
         </div>
       </div>

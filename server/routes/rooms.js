@@ -50,16 +50,26 @@ router.put('/:id', verifyToken, checkRole(['admin', 'staff']), async (req, res) 
 })
 
 // PUT update room status only
-router.put('/:id/status', verifyToken, checkRole(['admin', 'staff']), async (req, res) => {
+// PUT update room status only
+router.put('/:id/status', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
     const { status } = req.body
-    const room = await Room.findByIdAndUpdate(req.params.id, { status }, { new: true })
-    res.json(room)
+    const room = await Room.findById(req.params.id)
+    if (!room) return res.status(404).json({ message: 'Room not found' })
+
+    // Prevent marking occupied without a resident
+    if (status === 'occupied' && !room.residentId) {
+      return res.status(400).json({ 
+        message: 'Cannot mark room as occupied without assigning a resident first. Add a resident through the Residents page.' 
+      })
+    }
+
+    const updated = await Room.findByIdAndUpdate(req.params.id, { status }, { new: true })
+    res.json(updated)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 })
-
 // DELETE room
 router.delete('/:id', verifyToken, checkRole(['admin']), async (req, res) => {
   try {

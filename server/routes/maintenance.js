@@ -3,6 +3,7 @@ const router      = express.Router()
 const Maintenance = require('../models/Maintenance')
 const Resident    = require('../models/Resident')
 const { verifyToken, checkRole } = require('../middleware/auth')
+const { sendEmail } = require('../utils/email')
 
 // GET — residents see only their own
 router.get('/', verifyToken, async (req, res) => {
@@ -32,27 +33,34 @@ router.get('/', verifyToken, async (req, res) => {
 // POST create — residents can only file for their own room
 router.post('/', verifyToken, async (req, res) => {
   try {
-    let residentId = req.body.residentId
     let roomId = req.body.roomId
 
     if (req.user.role === 'resident') {
+      const Resident = require('../models/Resident')
       const resident = await Resident.findOne({ email: req.user.email })
-      if (!resident) {
-        return res.status(403).json({ message: 'No resident profile linked to this account' })
-      }
-      if (!resident.roomId) {
-        return res.status(400).json({ message: 'You have no room assigned yet' })
-      }
-      // Force both values server-side — never trust the client for these
-      residentId = resident._id
+      if (!resident) return res.status(400).json({ message: 'No resident profile linked to this account' })
       roomId = resident.roomId
     }
 
     const request = await Maintenance.create({
       ...req.body,
-      residentId,
       roomId,
+      residentId: req.user._id
     })
+
+    // Send confirmation email to resident
+    await sendEmail({
+      to:      req.user.email,
+      subject: 'Maintenance Request Submitted — HostelPro',
+      html: `
+        <h2>Your maintenance request has been submitted</h2>
+        <p><strong>Issue:</strong> ${request.issue}</p>
+        <p><strong>Priority:</strong> ${request.priority}</p>
+        <p><strong>Status:</strong> Open</p>
+        <p>We will assign a staff member shortly.</p>
+      `
+    })
+
     res.status(201).json(request)
   } catch (err) {
     res.status(500).json({ message: err.message })
