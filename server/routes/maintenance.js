@@ -83,24 +83,23 @@ router.get('/assignable', verifyToken, checkRole(['admin','staff']), async (req,
   }
 })
 
-// PUT assign — admin/staff only. Body: { assignedToType: 'User'|'Team', assignedTo: '<id>' }
+/// PUT assign — admin/staff only
 router.put('/:id/assign', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
-    const { assignedToType, assignedTo } = req.body
-    if (!['User', 'Team'].includes(assignedToType)) {
-      return res.status(400).json({ message: 'assignedToType must be "User" or "Team"' })
+    const { assignedTo } = req.body
+    if (!assignedTo || !assignedTo.trim()) {
+      return res.status(400).json({ message: 'assignedTo is required' })
     }
     const request = await Maintenance.findByIdAndUpdate(
       req.params.id,
-      { assignedToType, assignedTo, status: 'inprogress' },
+      { assignedTo: assignedTo.trim(), status: 'inprogress' },
       { new: true }
-    ).populate('assignedTo') // works for both User and Team thanks to refPath
+    )
     res.json(request)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
 })
-
 // PUT status — admin/staff only
 router.put('/:id/status', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {

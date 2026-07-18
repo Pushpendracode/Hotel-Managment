@@ -212,21 +212,28 @@ function AssignModal({ request, onClose, onAssign }) {
 
 export default function Maintenance() {
   const { user } = useAuth()
-  const [requests, setRequests]     = useState([])
-  const [rooms, setRooms]           = useState([])
-  const [filter, setFilter]         = useState('all')
-  const [loading, setLoading]       = useState(true)
-  const [showAdd, setShowAdd]       = useState(false)
+  const [requests, setRequests]         = useState([])
+  const [rooms, setRooms]               = useState([])
+  const [filter, setFilter]             = useState('all')
+  const [loading, setLoading]           = useState(true)
+  const [showAdd, setShowAdd]           = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
 
   const fetchAll = () => {
-    Promise.all([API.get('/maintenance'), API.get('/rooms')])
-      .then(([m, r]) => { setRequests(m.data); setRooms(r.data) })
+    API.get('/maintenance')
+      .then(m => setRequests(m.data))
       .catch(() => toast.error('Failed to load'))
       .finally(() => setLoading(false))
+
+    if (user?.role !== 'resident') {
+      API.get('/rooms')
+        .then(r => setRooms(r.data))
+        .catch(() => setRooms([]))
+    }
   }
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => { fetchAll() }, [])  
+
 
   const handleStatusUpdate = async (id, status) => {
     try {
