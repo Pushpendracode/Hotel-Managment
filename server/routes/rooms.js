@@ -49,7 +49,7 @@ router.put('/:id', verifyToken, checkRole(['admin', 'staff']), async (req, res) 
   }
 })
 
-// PUT update room status only
+
 // PUT update room status only
 router.put('/:id/status', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {

@@ -83,34 +83,50 @@ router.get('/assignable', verifyToken, checkRole(['admin','staff']), async (req,
   }
 })
 
-/// PUT assign — admin/staff only
-router.put('/:id/assign', verifyToken, checkRole(['admin','staff']), async (req, res) => {
+// PUT assign — admin/staff only
+router.put('/:id/assign', verifyToken, checkRole(['admin', 'staff']), async (req, res) => {
   try {
-    const { assignedTo } = req.body
-    if (!assignedTo || !assignedTo.trim()) {
-      return res.status(400).json({ message: 'assignedTo is required' })
+    const { assignedTo, assignedToType } = req.body
+
+    if (!assignedTo || !assignedToType) {
+      return res.status(400).json({
+        message: 'assignedTo and assignedToType are required'
+      })
     }
-    const request = await Maintenance.findByIdAndUpdate(
-      req.params.id,
-      { assignedTo: assignedTo.trim(), status: 'inprogress' },
-      { new: true }
-    )
+
+    if (!['User', 'Team'].includes(assignedToType)) {
+      return res.status(400).json({
+        message: 'Invalid assignedToType'
+      })
+    }
+
+    const request = await Maintenance.findById(req.params.id)
+
+    if (!request) {
+      return res.status(404).json({
+        message: 'Maintenance request not found'
+      })
+    }
+
+    request.assignedTo = assignedTo
+    request.assignedToType = assignedToType
+    request.status = 'inprogress'
+
+    await request.save()
+
+    await request.populate([
+      { path: 'roomId', select: 'number floor' },
+      { path: 'residentId', select: 'name' },
+      { path: 'assignedTo' }
+    ])
+
     res.json(request)
+
   } catch (err) {
-    res.status(500).json({ message: err.message })
-  }
-})
-// PUT status — admin/staff only
-router.put('/:id/status', verifyToken, checkRole(['admin','staff']), async (req, res) => {
-  try {
-    const request = await Maintenance.findByIdAndUpdate(
-      req.params.id,
-      { status: req.body.status },
-      { new: true }
-    )
-    res.json(request)
-  } catch (err) {
-    res.status(500).json({ message: err.message })
+    console.error(err)
+    res.status(500).json({
+      message: err.message
+    })
   }
 })
 

@@ -120,26 +120,57 @@ function NewRequestModal({ onClose, onAdd, rooms }) {
 }
 
 function AssignModal({ request, onClose, onAssign }) {
-  const [assignedTo, setAssignedTo] = useState(request.assignedTo || '')
-  const [staffList, setStaffList]   = useState([])
-  const [saving, setSaving]         = useState(false)
+  const [assignable, setAssignable] = useState({
+    staff: [],
+    teams: []
+  })
+
+  const [selectedId, setSelectedId] = useState('')
+  const [selectedType, setSelectedType] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    API.get('/auth/users')
-      .then(res => setStaffList(
-        res.data.filter(u => u.role === 'staff' || u.role === 'admin')
-      ))
-      .catch(() => setStaffList([]))
+    API.get('/maintenance/assignable')
+      .then(res => {
+        setAssignable(res.data)
+      })
+      .catch(() => {
+        toast.error('Failed to load assignable users')
+      })
   }, [])
 
+  const handleChange = (e) => {
+    const value = e.target.value
+
+    if (!value) {
+      setSelectedId('')
+      setSelectedType('')
+      return
+    }
+
+    const [id, type] = value.split('|')
+
+    setSelectedId(id)
+    setSelectedType(type)
+  }
+
   const handleSubmit = async () => {
-    if (!assignedTo.trim()) return toast.error('Enter a name to assign')
+    if (!selectedId) {
+      return toast.error('Please select a staff member or team')
+    }
+
     setSaving(true)
+
     try {
-      await API.put(`/maintenance/${request._id}/assign`, { assignedTo: assignedTo.trim() })
-      toast.success('Request assigned!')
+      await API.put(`/maintenance/${request._id}/assign`, {
+        assignedTo: selectedId,
+        assignedToType: selectedType
+      })
+
+      toast.success('Request assigned successfully!')
       onAssign()
       onClose()
+
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to assign')
     } finally {
@@ -150,61 +181,94 @@ function AssignModal({ request, onClose, onAssign }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold">Assign Personnel</h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+          <h2 className="text-base font-semibold">
+            Assign Maintenance
+          </h2>
+
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-gray-100 rounded-lg"
+          >
             <X size={16}/>
           </button>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-3 mb-4">
-          <div className="text-xs text-gray-400 mb-0.5">Issue</div>
-          <div className="text-sm font-medium text-gray-800">{request.issue}</div>
-          {request.roomId && (
-            <div className="text-xs text-gray-400 mt-1">Room {request.roomId.number}</div>
-          )}
-        </div>
+        <div className="space-y-4">
 
-        <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">
-              Assign to <span className="text-red-400">*</span>
+              Assign To
             </label>
-            <input value={assignedTo} onChange={e => setAssignedTo(e.target.value)}
-              placeholder="Enter staff name"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+
+            <select
+              value={
+                selectedId
+                  ? `${selectedId}|${selectedType}`
+                  : ''
+              }
+              onChange={handleChange}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200"
+            >
+              <option value="">
+                Select Staff / Team
+              </option>
+
+              {assignable.staff.length > 0 && (
+                <optgroup label="Staff">
+
+                  {assignable.staff.map(user => (
+                    <option
+                      key={user.id}
+                      value={`${user.id}|User`}
+                    >
+                      {user.label}
+                    </option>
+                  ))}
+
+                </optgroup>
+              )}
+
+              {assignable.teams.length > 0 && (
+                <optgroup label="Teams">
+
+                  {assignable.teams.map(team => (
+                    <option
+                      key={team.id}
+                      value={`${team.id}|Team`}
+                    >
+                      {team.label}
+                    </option>
+                  ))}
+
+                </optgroup>
+              )}
+
+            </select>
           </div>
 
-          {staffList.length > 0 && (
-            <div>
-              <p className="text-xs text-gray-400 mb-1.5">Quick assign from staff:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {staffList.map(s => (
-                  <button key={s._id} onClick={() => setAssignedTo(s.name)}
-                    className={`text-xs px-2 py-1 rounded-md border transition
-                      ${assignedTo === s.name
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="flex gap-2 mt-6">
-          <button onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 rounded-lg border border-gray-200"
+          >
             Cancel
           </button>
-          <button onClick={handleSubmit} disabled={saving}
-            className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm
-                       font-medium hover:bg-emerald-700 disabled:bg-emerald-300">
-            {saving ? 'Assigning…' : 'Assign'}
+
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="flex-1 py-2 rounded-lg bg-emerald-600 text-white"
+          >
+            {saving ? 'Assigning...' : 'Assign'}
           </button>
+
         </div>
+
       </div>
     </div>
   )
@@ -333,8 +397,10 @@ export default function Maintenance() {
                     </span>
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-500">
-                    {req.assignedTo || <span className="text-gray-300">Unassigned</span>}
-                  </td>
+  {req.assignedTo
+    ? req.assignedTo.name || req.assignedTo.label || 'Assigned'
+    : <span className="text-gray-300">Unassigned</span>}
+</td>
                   <td className="py-3 px-4 text-sm text-gray-500">
                     {new Date(req.createdAt).toLocaleDateString('en-IN')}
                   </td>
