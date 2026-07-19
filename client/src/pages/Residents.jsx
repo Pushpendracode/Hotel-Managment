@@ -1,208 +1,205 @@
-import { useState, useEffect } from 'react'
-import { DoorOpen, Receipt, Wrench, Plus, X } from 'lucide-react'
-import API from '../api/axios'
-import { useAuth } from '../context/AuthContext'
+import { useEffect, useState } from "react";
+import { Plus, Search, Edit, Trash2, LogOut } from "lucide-react";
+import API from "../api/axios";
+import AddResidentModal from "../components/AddResidentModal";
 
-function StatusBadge({ status }) {
-  const styles = {
-    paid: 'bg-emerald-50 text-emerald-700',
-    pending: 'bg-amber-50 text-amber-700',
-    overdue: 'bg-red-50 text-red-600',
-    partial: 'bg-blue-50 text-blue-700',
-    open: 'bg-amber-50 text-amber-700',
-    inprogress: 'bg-blue-50 text-blue-700',
-    completed: 'bg-emerald-50 text-emerald-700',
-  }
-  return (
-    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium capitalize ${styles[status] || 'bg-gray-100 text-gray-600'}`}>
-      {status}
-    </span>
-  )
-}
 
-function NewRequestModal({ onClose, onCreated }) {
-  const [issue, setIssue] = useState('')
-  const [priority, setPriority] = useState('medium')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+export default function Residents() {
+  const [residents, setResidents] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault()
-    if (!issue.trim()) { setError('Please describe the issue'); return }
-    setSaving(true)
-    setError('')
+  const loadResidents = async () => {
     try {
-      // roomId & residentId are set server-side from the logged-in user — never sent from here
-      await API.post('/maintenance', { issue: issue.trim(), priority, status: 'open' })
-      onCreated()
-      onClose()
+      const res = await API.get("/residents");
+      setResidents(res.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to submit request')
+      console.log(err);
     } finally {
-      setSaving(false)
+      setLoading(false);
     }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl p-6 w-full max-w-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-gray-900">New Maintenance Request</h3>
-          <button onClick={onClose}><X size={16} className="text-gray-400" /></button>
-        </div>
-        <form onSubmit={submit} className="space-y-3">
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Issue</label>
-            <textarea
-              value={issue}
-              onChange={e => setIssue(e.target.value)}
-              rows={3}
-              className="w-full text-sm border border-gray-200 rounded-lg p-2 focus:outline-none focus:border-emerald-400"
-              placeholder="e.g. AC not cooling properly"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Priority</label>
-            <select
-              value={priority}
-              onChange={e => setPriority(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-lg p-2 focus:outline-none focus:border-emerald-400"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </div>
-          {error && <p className="text-xs text-red-500">{error}</p>}
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full bg-emerald-600 text-white text-sm font-medium rounded-lg py-2 hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {saving ? 'Submitting…' : 'Submit Request'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-export default function ResidentDashboard() {
-  const { user } = useAuth()
-  const [resident, setResident] = useState(null)
-  const [invoices, setInvoices] = useState([])
-  const [requests, setRequests] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-
-  const loadRequests = () => {
-    API.get('/maintenance').then(res => setRequests(res.data)).catch(() => setRequests([]))
-  }
+  };
 
   useEffect(() => {
-    Promise.all([
-      API.get('/residents/me').then(res => setResident(res.data)).catch(() => setResident(null)),
-      API.get('/invoices').then(res => setInvoices(res.data)).catch(() => setInvoices([])),
-      API.get('/maintenance').then(res => setRequests(res.data)).catch(() => setRequests([])),
-    ]).finally(() => setLoading(false))
-  }, [])
+    loadResidents();
+  }, []);
 
-  if (loading) {
-    return <div className="text-center py-10 text-sm text-gray-400">Loading your dashboard…</div>
-  }
-
-  const room = resident?.roomId
-  const pendingInvoices = invoices.filter(i => i.status !== 'paid')
+  const filteredResidents = residents.filter((resident) =>
+    resident.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
-    <div>
-      {showModal && (
-        <NewRequestModal onClose={() => setShowModal(false)} onCreated={loadRequests} />
-      )}
+    <div className="p-6">
 
-      {/* Welcome + Room Info */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 mb-4">
-        <h2 className="text-base font-semibold text-gray-900 mb-1">
-          Welcome, {user?.name}
-        </h2>
-        {room ? (
-          <div className="flex items-center gap-4 mt-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <DoorOpen size={18} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-800">Room #{room.number} · Floor {room.floor}</p>
-              <p className="text-xs text-gray-400 capitalize">{room.type} · ₹{room.price?.toLocaleString()}/mo</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400">No room assigned yet — contact the front desk.</p>
-        )}
+      {/* Header */}
+
+      <div className="flex justify-between items-center mb-6">
+
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Resident Management
+          </h1>
+
+          <p className="text-gray-500 text-sm">
+            Manage all hostel residents
+          </p>
+        </div>
+
+        <button
+  onClick={() => setShowModal(true)}
+  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg flex items-center gap-2"
+>
+  <Plus size={18} />
+  Add Resident
+</button>
+
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Invoices */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <Receipt size={15} className="text-purple-500" /> Your Invoices
-            </h2>
-            {pendingInvoices.length > 0 && (
-              <span className="text-xs bg-red-50 text-red-600 px-2 py-1 rounded-md font-medium">
-                {pendingInvoices.length} due
-              </span>
+      {/* Search */}
+
+      <div className="bg-white rounded-xl shadow p-4 mb-6">
+
+        <div className="relative">
+
+          <Search
+            size={18}
+            className="absolute left-3 top-3 text-gray-400"
+          />
+
+          <input
+            type="text"
+            placeholder="Search resident..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full border rounded-lg py-2 pl-10 pr-4"
+          />
+
+        </div>
+
+      </div>
+
+      {/* Table */}
+
+      <div className="bg-white rounded-xl shadow overflow-hidden">
+
+        <table className="w-full">
+
+          <thead className="bg-gray-100">
+
+            <tr>
+
+              <th className="text-left p-4">Name</th>
+
+              <th className="text-left">Room</th>
+
+              <th className="text-left">Phone</th>
+
+              <th className="text-left">Email</th>
+
+              <th className="text-left">Status</th>
+
+              <th className="text-center">Action</th>
+
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            {loading ? (
+
+              <tr>
+                <td
+                  colSpan="6"
+                  className="text-center py-8"
+                >
+                  Loading...
+                </td>
+              </tr>
+
+            ) : filteredResidents.length === 0 ? (
+
+              <tr>
+                <td
+                  colSpan="6"
+                  className="text-center py-8"
+                >
+                  No Residents Found
+                </td>
+              </tr>
+
+            ) : (
+
+              filteredResidents.map((resident) => (
+
+                <tr
+                  key={resident._id}
+                  className="border-b hover:bg-gray-50"
+                >
+
+                  <td className="p-4 font-medium">
+                    {resident.name}
+                  </td>
+
+                  <td>
+                    {resident.roomId?.number || "-"}
+                  </td>
+
+                  <td>
+                    {resident.phone}
+                  </td>
+
+                  <td>
+                    {resident.email}
+                  </td>
+
+                  <td>
+
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        resident.status === "active"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {resident.status}
+                    </span>
+
+                  </td>
+
+                  <td>
+
+                    <div className="flex justify-center gap-3">
+
+                      <button className="text-blue-600">
+                        <Edit size={18} />
+                      </button>
+
+                      <button className="text-red-600">
+                        <Trash2 size={18} />
+                      </button>
+
+                      <button className="text-orange-600">
+                        <LogOut size={18} />
+                      </button>
+
+                    </div>
+
+                  </td>
+
+                </tr>
+
+              ))
+
             )}
-          </div>
-          {invoices.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">No invoices yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {invoices.slice(0, 5).map(inv => (
-                <div key={inv._id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <div>
-                    <p className="text-sm text-gray-800">
-                      {new Date(inv.dueDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-                    </p>
-                    <p className="text-xs text-gray-400">₹{inv.total?.toLocaleString()}</p>
-                  </div>
-                  <StatusBadge status={inv.status} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Maintenance Requests */}
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <Wrench size={15} className="text-amber-500" /> Maintenance Requests
-            </h2>
-            <button
-              onClick={() => setShowModal(true)}
-              disabled={!room}
-              className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1 disabled:text-gray-300"
-            >
-              <Plus size={12} /> New
-            </button>
-          </div>
-          {requests.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">No requests submitted.</p>
-          ) : (
-            <div className="space-y-2">
-              {requests.slice(0, 5).map(req => (
-                <div key={req._id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <div>
-                    <p className="text-sm text-gray-800">{req.issue}</p>
-                    <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleDateString()}</p>
-                  </div>
-                  <StatusBadge status={req.status} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          </tbody>
+
+        </table>
+
       </div>
+
     </div>
-  )
+  );
 }
