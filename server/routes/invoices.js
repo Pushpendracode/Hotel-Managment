@@ -85,6 +85,8 @@ router.post(
         "residentId",
         "name email"
       );
+// Send response immediately
+res.status(201).json(populated);
 
       // Send Email
       if (populated.residentId?.email) {
