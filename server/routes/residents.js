@@ -5,6 +5,9 @@ const Room     = require('../models/Room')
 const mongoose = require('mongoose')
 const { verifyToken, checkRole } = require('../middleware/auth')
 
+const User = require('../models/User')
+const { sendEmail } = require('../utils/email')
+
 // GET all residents — admin/staff only
 router.get('/', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
@@ -27,63 +30,142 @@ router.get('/me', verifyToken, async (req, res) => {
 })
 
 // POST add resident — admin/staff only
-router.post('/', verifyToken, checkRole(['admin','staff']), async (req, res) => {
+// POST add resident — admin/staff only
+router.post('/', verifyToken, checkRole(['admin', 'staff']), async (req, res) => {
   try {
-    const { roomId, email, name, phone } = req.body
+    const {
+      roomId,
+      name,
+      email,
+      phone,
+      gender,
+      address,
+      emergencyContact,
+      checkIn,
+      idProof
+    } = req.body
 
+    // Check room
     const room = await Room.findById(roomId)
-    if (!room) return res.status(404).json({ message: 'Room not found' })
-    if (room.status !== 'vacant') return res.status(400).json({ message: 'Room is not vacant' })
 
-    const resident = await Resident.create(req.body)
-    await Room.findByIdAndUpdate(roomId, { status: 'occupied', residentId: resident._id })
-
-    // Auto-create a user login for this resident
-    const bcrypt = require('bcryptjs')
-    const db = mongoose.connection.db
-    const existing = await db.collection('users').findOne({ email })
-    if (!existing) {
-      const defaultPassword = phone || 'resident123'
-      const hashed = await bcrypt.hash(defaultPassword, 10)
-      await db.collection('users').insertOne({
-        name, email,
-        password: hashed,
-        role: 'resident',
-        isActive: true,
-        createdAt: new Date()
+    if (!room) {
+      return res.status(404).json({
+        message: 'Room not found'
       })
     }
 
+    if (room.status !== 'vacant') {
+      return res.status(400).json({
+        message: 'Room is already occupied'
+      })
+    }
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ email })
+
+    if (existingUser) {
+      return res.status(400).json({
+        message: 'Email already exists'
+      })
+    }
+
+    // Default password
+    const defaultPassword = phone || 'resident123'
+
+    // Create User Account
+    const user = new User({
+      name,
+      email,
+      password: defaultPassword,
+      role: 'resident',
+      phone
+    })
+
+    await user.save()
+
+    // Create Resident Profile
+    const resident = await Resident.create({
+      userId: user._id,
+      roomId,
+      name,
+      email,
+      phone,
+      gender,
+      address,
+      emergencyContact,
+      checkIn,
+      idProof,
+      status: 'active'
+    })
+
+    // Update Room
+    room.status = 'occupied'
+    room.residentId = resident._id
+    await room.save()
+
+    // Send Welcome Email
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Welcome to HostelPro',
+        html: `
+          <h2>Hello ${name},</h2>
+
+          <p>Your HostelPro account has been created successfully.</p>
+
+          <table border="1" cellpadding="8" cellspacing="0">
+            <tr>
+              <td><strong>Name</strong></td>
+              <td>${name}</td>
+            </tr>
+            <tr>
+              <td><strong>Email</strong></td>
+              <td>${email}</td>
+            </tr>
+            <tr>
+              <td><strong>Password</strong></td>
+              <td>${defaultPassword}</td>
+            </tr>
+            <tr>
+              <td><strong>Room No</strong></td>
+              <td>${room.number}</td>
+            </tr>
+          </table>
+
+          <br>
+
+          <p>Please login and change your password after your first login.</p>
+
+          <br>
+
+          <p>Regards,<br><b>HostelPro Team</b></p>
+        `
+      })
+
+      console.log("Welcome email sent.")
+    } catch (emailErr) {
+      console.log("Email Error:", emailErr.message)
+    }
+
     res.status(201).json({
+      success: true,
+      message: 'Resident added successfully',
       resident,
-      loginCredentials: {
+      credentials: {
         email,
-        defaultPassword: phone || 'resident123',
-        message: 'A login account has been created for this resident'
+        password: defaultPassword
       }
     })
+
   } catch (err) {
-    res.status(500).json({ message: err.message })
+    console.error(err)
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    })
   }
 })
-
-// PUT checkout — admin/staff only
-router.put('/:id/checkout', verifyToken, checkRole(['admin','staff']), async (req, res) => {
-  try {
-    const resident = await Resident.findByIdAndUpdate(
-      req.params.id,
-      { status: 'checkedout', checkOut: new Date() },
-      { new: true }
-    )
-    if (resident.roomId) {
-      await Room.findByIdAndUpdate(resident.roomId, { status: 'vacant', residentId: null })
-    }
-    res.json(resident)
-  } catch (err) {
-    res.status(500).json({ message: err.message })
-  }
-})
-
 // DELETE — admin only
 router.delete('/:id', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
