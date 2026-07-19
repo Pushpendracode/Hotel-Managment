@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { Users, DoorOpen, TrendingUp, Wrench } from 'lucide-react'
 import API from '../api/axios'
 import { useAuth } from '../context/AuthContext'
-import ResidentDashboard from './ResidentDashboard'
+import Residents from "./Residents";
 
 const revenueData = [
   { month: 'Jan', revenue: 2.1 },
@@ -54,7 +54,7 @@ export default function Dashboard() {
 
   // Resident role gets its own dedicated dashboard component
   if (user?.role === 'resident') {
-    return <ResidentDashboard />
+    return <Residents />
   }
 
   return (
