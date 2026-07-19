@@ -1,7 +1,11 @@
-const express     = require('express')
-const router      = express.Router()
+const express = require('express')
+const router = express.Router()
+
 const Maintenance = require('../models/Maintenance')
-const Resident    = require('../models/Resident')
+const Resident = require('../models/Resident')
+const User = require('../models/User')      
+const Team = require('../models/Team')      
+
 const { verifyToken, checkRole } = require('../middleware/auth')
 const { sendEmail } = require('../utils/email')
 
@@ -70,8 +74,7 @@ router.post('/', verifyToken, async (req, res) => {
 // GET assignable options — staff users + teams, for the Assign dropdown
 router.get('/assignable', verifyToken, checkRole(['admin','staff']), async (req, res) => {
   try {
-    const User = require('../models/User')
-    const Team = require('../models/Team')
+    
     const staff = await User.find({ role: 'staff', isActive: true }).select('name department')
     const teams = await Team.find().select('name')
     res.json({
