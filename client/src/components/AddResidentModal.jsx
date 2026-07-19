@@ -5,8 +5,10 @@ import API from "../api/axios";
 export default function AddResidentModal({
   onClose,
   onSuccess,
+  editData, // null/undefined = add mode, object = edit mode
 }) {
   const [rooms, setRooms] = useState([]);
+  const isEditMode = Boolean(editData);
 
   const [form, setForm] = useState({
     name: "",
@@ -24,6 +26,25 @@ export default function AddResidentModal({
   useEffect(() => {
     loadRooms();
   }, []);
+
+  useEffect(() => {
+    if (editData) {
+      setForm({
+        name: editData.name || "",
+        email: editData.email || "",
+        phone: editData.phone || "",
+        password: "", // never prefill password
+        gender: editData.gender || "",
+        address: editData.address || "",
+        emergencyContact: editData.emergencyContact || "",
+        idProof: editData.idProof || "",
+        roomId: editData.roomId?._id || editData.roomId || "",
+        checkIn: editData.checkIn
+          ? editData.checkIn.substring(0, 10) // format for <input type="date">
+          : "",
+      });
+    }
+  }, [editData]);
 
   const loadRooms = async () => {
     try {
@@ -50,17 +71,36 @@ export default function AddResidentModal({
     e.preventDefault();
 
     try {
-      await API.post("/residents", form);
+      if (isEditMode) {
+        // Don't send an empty password on update
+        const payload = { ...form };
+        if (!payload.password) delete payload.password;
 
-      alert("Resident Added Successfully");
+        await API.put(`/residents/${editData._id}`, payload);
+        alert("Resident Updated Successfully");
+      } else {
+        await API.post("/residents", form);
+        alert("Resident Added Successfully");
+      }
 
       onSuccess();
-
       onClose();
     } catch (err) {
       alert(err.response?.data?.message || "Error");
     }
   };
+
+  // Merge in the resident's current room (it's occupied, so it won't be
+  // in the vacant list) so the select doesn't show blank on edit.
+  const roomOptions =
+    isEditMode && editData.roomId
+      ? [
+          typeof editData.roomId === "object"
+            ? editData.roomId
+            : { _id: editData.roomId, number: "(current)", floor: "-" },
+          ...rooms,
+        ]
+      : rooms;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
@@ -70,7 +110,7 @@ export default function AddResidentModal({
         <div className="flex justify-between items-center mb-5">
 
           <h2 className="text-xl font-bold">
-            Add Resident
+            {isEditMode ? "Edit Resident" : "Add Resident"}
           </h2>
 
           <button onClick={onClose}>
@@ -88,6 +128,7 @@ export default function AddResidentModal({
             name="name"
             placeholder="Resident Name"
             className="border p-2 rounded"
+            value={form.name}
             onChange={changeHandler}
             required
           />
@@ -96,6 +137,7 @@ export default function AddResidentModal({
             name="email"
             placeholder="Email"
             className="border p-2 rounded"
+            value={form.email}
             onChange={changeHandler}
             required
           />
@@ -104,21 +146,24 @@ export default function AddResidentModal({
             name="phone"
             placeholder="Phone"
             className="border p-2 rounded"
+            value={form.phone}
             onChange={changeHandler}
             required
           />
 
           <input
             name="password"
-            placeholder="Password"
+            placeholder={isEditMode ? "New Password (optional)" : "Password"}
             className="border p-2 rounded"
+            value={form.password}
             onChange={changeHandler}
-            required
+            required={!isEditMode}
           />
 
           <select
             name="gender"
             className="border p-2 rounded"
+            value={form.gender}
             onChange={changeHandler}
           >
             <option value="">Gender</option>
@@ -130,6 +175,7 @@ export default function AddResidentModal({
             type="date"
             name="checkIn"
             className="border p-2 rounded"
+            value={form.checkIn}
             onChange={changeHandler}
           />
 
@@ -137,6 +183,7 @@ export default function AddResidentModal({
             name="emergencyContact"
             placeholder="Emergency Contact"
             className="border p-2 rounded"
+            value={form.emergencyContact}
             onChange={changeHandler}
           />
 
@@ -144,6 +191,7 @@ export default function AddResidentModal({
             name="idProof"
             placeholder="Aadhar / ID Number"
             className="border p-2 rounded"
+            value={form.idProof}
             onChange={changeHandler}
           />
 
@@ -152,12 +200,14 @@ export default function AddResidentModal({
             placeholder="Address"
             className="border p-2 rounded col-span-2"
             rows="3"
+            value={form.address}
             onChange={changeHandler}
           />
 
           <select
             name="roomId"
             className="border p-2 rounded col-span-2"
+            value={form.roomId}
             onChange={changeHandler}
             required
           >
@@ -165,7 +215,7 @@ export default function AddResidentModal({
               Select Vacant Room
             </option>
 
-            {rooms.map((room) => (
+            {roomOptions.map((room) => (
               <option
                 key={room._id}
                 value={room._id}
@@ -179,7 +229,7 @@ export default function AddResidentModal({
           <button
             className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg"
           >
-            Save Resident
+            {isEditMode ? "Update Resident" : "Save Resident"}
           </button>
 
         </form>
