@@ -30,6 +30,7 @@ const userSchema = new mongoose.Schema(
 
     phone: {
       type: String,
+      default: "",
     },
 
     isActive: {
@@ -56,17 +57,28 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+/*
+|--------------------------------------------------------------------------
+| Hash Password Before Save
+|--------------------------------------------------------------------------
+| Mongoose 8+ compatible
+*/
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) {
+    return;
+  }
 
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Compare password helper
-userSchema.methods.matchPassword = async function (entered) {
-  return bcrypt.compare(entered, this.password);
+/*
+|--------------------------------------------------------------------------
+| Compare Password
+|--------------------------------------------------------------------------
+*/
+userSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
 };
 
 module.exports = mongoose.model("User", userSchema);
