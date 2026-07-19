@@ -133,6 +133,49 @@ router.put('/:id/assign', verifyToken, checkRole(['admin', 'staff']), async (req
   }
 })
 
+// UPDATE STATUS
+router.put(
+  "/:id/status",
+  verifyToken,
+  checkRole(["admin", "staff"]),
+  async (req, res) => {
+    try {
+      const { status } = req.body;
+
+      if (!["open", "inprogress", "completed"].includes(status)) {
+        return res.status(400).json({
+          message: "Invalid status",
+        });
+      }
+
+      const request = await Maintenance.findById(req.params.id);
+
+      if (!request) {
+        return res.status(404).json({
+          message: "Maintenance request not found",
+        });
+      }
+
+      request.status = status;
+
+      await request.save();
+
+      await request.populate([
+        { path: "roomId", select: "number floor" },
+        { path: "residentId", select: "name" },
+        { path: "assignedTo" },
+      ]);
+
+      res.json(request);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        message: err.message,
+      });
+    }
+  }
+);
+
 // DELETE — admin only
 router.delete('/:id', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
