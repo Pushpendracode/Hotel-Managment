@@ -354,8 +354,7 @@ router.put(
       // Update Resident
       resident.status = "checkedout";
       resident.checkOut = new Date();
-      resident.roomId = null;
-
+    
       await resident.save();
 
       // Notify admin/staff that a room is now vacant
