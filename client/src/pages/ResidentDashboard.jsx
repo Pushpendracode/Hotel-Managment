@@ -10,6 +10,8 @@ export default function ResidentDashboard() {
     const load = async () => {
       try {
         setLoading(true)
+        setResident(null)
+        setError('')
         const res = await API.get('/residents/me')
         setResident(res.data)
       } catch (err) {

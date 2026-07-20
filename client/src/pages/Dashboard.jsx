@@ -54,7 +54,7 @@ export default function Dashboard() {
 
   // Resident role gets its own dedicated dashboard component
   if (user?.role === 'resident') {
-    return <ResidentDashboard />
+    return <ResidentDashboard key={user?.id} />
   }
 
   return (
