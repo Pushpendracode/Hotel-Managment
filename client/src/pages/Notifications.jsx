@@ -2,7 +2,6 @@ import { useState, useEffect } from "react"
 import { Bell, CheckCheck, Wrench, Receipt, DoorOpen, AlertCircle } from "lucide-react"
 import API from "../api/axios"
 import toast from "react-hot-toast"
-import { useAuth } from "../context/AuthContext"
 
 const typeConfig = {
   maintenance: { icon: Wrench,       bg: "bg-amber-50",   text: "text-amber-600",  dot: "bg-amber-500" },
@@ -10,15 +9,6 @@ const typeConfig = {
   room:        { icon: DoorOpen,     bg: "bg-emerald-50", text: "text-emerald-600",dot: "bg-emerald-500" },
   general:     { icon: AlertCircle,  bg: "bg-gray-100",   text: "text-gray-600",   dot: "bg-gray-400" },
 }
-
-const demoNotifs = [
-  { _id: "1", title: "AC failure in Room 302",          message: "High priority maintenance request submitted", type: "maintenance", read: false, createdAt: new Date(Date.now() - 2*60*60*1000) },
-  { _id: "2", title: "Payment overdue — Vikram Nair",   message: "Invoice INV-0087 is 3 days overdue",          type: "billing",     read: false, createdAt: new Date(Date.now() - 5*60*60*1000) },
-  { _id: "3", title: "Room 410 checkout tomorrow",      message: "Prepare room for new resident check-in",      type: "room",        read: false, createdAt: new Date(Date.now() - 8*60*60*1000) },
-  { _id: "4", title: "Maintenance #MR-016 completed",   message: "Plumbing issue in Room 207 resolved",         type: "maintenance", read: true,  createdAt: new Date(Date.now() - 24*60*60*1000) },
-  { _id: "5", title: "New resident check-in",           message: "Rajesh Kumar checked into Room 204",          type: "room",        read: true,  createdAt: new Date(Date.now() - 2*24*60*60*1000) },
-  { _id: "6", title: "Invoice generated",               message: "Invoice INV-0089 generated for ₹8,500",       type: "billing",     read: true,  createdAt: new Date(Date.now() - 3*24*60*60*1000) },
-]
 
 function timeAgo(date) {
   const diff = Date.now() - new Date(date).getTime()
@@ -31,19 +21,47 @@ function timeAgo(date) {
 }
 
 export default function Notifications() {
-  const { user } = useAuth()
-  const [notifs, setNotifs]   = useState(user?.role === 'resident' ? [] : demoNotifs)
+  const [notifs, setNotifs]   = useState([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter]   = useState("all")
+
+  const load = async () => {
+    try {
+      setLoading(true)
+      const res = await API.get("/notifications")
+      setNotifs(res.data)
+    } catch (err) {
+      console.log(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
 
   const unread = notifs.filter(n => !n.read).length
 
-  const markAllRead = () => {
-    setNotifs(n => n.map(notif => ({ ...notif, read: true })))
-    toast.success("All notifications marked as read")
+  const markAllRead = async () => {
+    setNotifs(n => n.map(notif => ({ ...notif, read: true }))) // optimistic
+    try {
+      await API.put("/notifications/read-all")
+      toast.success("All notifications marked as read")
+    } catch (err) {
+      console.log(err)
+      toast.error("Failed to update — refreshing")
+      load()
+    }
   }
 
-  const markRead = (id) => {
-    setNotifs(n => n.map(notif => notif._id === id ? { ...notif, read: true } : notif))
+  const markRead = async (id) => {
+    setNotifs(n => n.map(notif => notif._id === id ? { ...notif, read: true } : notif)) // optimistic
+    try {
+      await API.put(`/notifications/${id}/read`)
+    } catch (err) {
+      console.log(err)
+    }
   }
 
   const filtered = filter === "all"
@@ -57,21 +75,6 @@ export default function Notifications() {
     unread:      notifs.filter(n => !n.read).length,
     maintenance: notifs.filter(n => n.type === "maintenance").length,
     billing:     notifs.filter(n => n.type === "billing").length,
-  }
-
-  if (user?.role === 'resident') {
-    return (
-      <div>
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-1">
-            Notifications
-          </h2>
-          <p className="text-sm text-gray-400">
-            No notifications yet. You'll be notified here about updates to your maintenance requests and billing.
-          </p>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -121,19 +124,21 @@ export default function Notifications() {
 
           {/* List */}
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-16 text-sm text-gray-400">Loading…</div>
+            ) : filtered.length === 0 ? (
               <div className="text-center py-16">
                 <Bell size={32} className="mx-auto text-gray-200 mb-2" />
                 <p className="text-sm text-gray-400">No notifications</p>
               </div>
             ) : (
               <div>
-                {filtered.map((notif, i) => {
+                {filtered.map((notif) => {
                   const config = typeConfig[notif.type] || typeConfig.general
                   const Icon   = config.icon
                   return (
                     <div key={notif._id}
-                      onClick={() => markRead(notif._id)}
+                      onClick={() => !notif.read && markRead(notif._id)}
                       className={`flex items-start gap-4 p-4 border-b border-gray-50
                                   cursor-pointer transition hover:bg-gray-50
                                   ${!notif.read ? "bg-blue-50/30" : ""}`}>
@@ -170,52 +175,16 @@ export default function Notifications() {
           </div>
         </div>
 
-        {/* Settings Panel */}
+        {/* Integration Status */}
         <div className="space-y-4">
-          {/* Notification Preferences */}
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-4">Preferences</h2>
-            <div className="space-y-3">
-              {[
-                { label: "Maintenance updates", email: true,  push: true,  sms: false },
-                { label: "Payment reminders",   email: true,  push: false, sms: true },
-                { label: "Check-in / out",       email: true,  push: true,  sms: false },
-                { label: "Room availability",    email: false, push: true,  sms: false },
-                { label: "Billing alerts",       email: true,  push: true,  sms: true },
-              ].map(({ label, email, push, sms }) => (
-                <div key={label} className="flex items-center justify-between py-2
-                                            border-b border-gray-50">
-                  <span className="text-xs text-gray-600">{label}</span>
-                  <div className="flex gap-1.5">
-                    {[
-                      { key: "E", active: email },
-                      { key: "P", active: push },
-                      { key: "S", active: sms },
-                    ].map(({ key, active }) => (
-                      <span key={key}
-                        className={`w-5 h-5 rounded text-xs font-medium flex items-center
-                                   justify-center ${active
-                                     ? "bg-emerald-100 text-emerald-700"
-                                     : "bg-gray-100 text-gray-300"}`}>
-                        {key}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <p className="text-xs text-gray-400 pt-1">E = Email · P = Push · S = SMS</p>
-            </div>
-          </div>
-
-          {/* Integration Status */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-4">Integrations</h2>
             <div className="space-y-3">
               {[
-                { name: "SMTP Email",    provider: "Nodemailer", status: "connected" },
-                { name: "SMS",          provider: "Twilio",     status: "connected" },
-                { name: "Payments",     provider: "Razorpay",   status: "connected" },
-                { name: "WhatsApp",     provider: "WATI",       status: "pending" },
+                { name: "In-app Notifications", provider: "HostelPro",  status: "active" },
+                { name: "Email",                provider: "Nodemailer (Brevo SMTP)", status: "active" },
+                { name: "Payments",              provider: "Razorpay",  status: "active" },
+                { name: "SMS",                   provider: "Not configured", status: "unavailable" },
               ].map(({ name, provider, status }) => (
                 <div key={name} className="flex items-center justify-between py-2
                                             border-b border-gray-50">
@@ -224,14 +193,17 @@ export default function Notifications() {
                     <div className="text-xs text-gray-400">{provider}</div>
                   </div>
                   <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium
-                    ${status === "connected"
+                    ${status === "active"
                       ? "bg-emerald-50 text-emerald-700"
-                      : "bg-amber-50 text-amber-700"}`}>
+                      : "bg-gray-100 text-gray-500"}`}>
                     {status}
                   </span>
                 </div>
               ))}
             </div>
+            <p className="text-xs text-gray-400 mt-3">
+              Notifications fire automatically on maintenance updates, new invoices, payments, check-ins and check-outs.
+            </p>
           </div>
         </div>
       </div>

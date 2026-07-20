@@ -7,6 +7,7 @@ const User = require("../models/User");
 
 const { verifyToken, checkRole } = require("../middleware/auth");
 const { sendEmail } = require("../utils/email");
+const { notify } = require("../utils/notify");
 
 
 router.get(
@@ -209,6 +210,15 @@ router.post(
         console.log(emailErr.message);
       }
 
+      // Notify admin/staff that a room's occupancy has changed
+      await notify({
+        title: "New resident checked in",
+        message: `${name} checked into Room ${room.number}`,
+        type: "room",
+        roles: ["admin", "staff"],
+        relatedId: resident._id,
+      });
+
       res.status(201).json({
         success: true,
         message: "Resident Added Successfully",
@@ -332,11 +342,13 @@ router.put(
       }
 
       // Free Room
+      let vacatedRoomNumber = null;
       if (resident.roomId) {
-        await Room.findByIdAndUpdate(resident.roomId, {
+        const freedRoom = await Room.findByIdAndUpdate(resident.roomId, {
           status: "vacant",
           residentId: null,
         });
+        vacatedRoomNumber = freedRoom?.number;
       }
 
       // Update Resident
@@ -345,6 +357,15 @@ router.put(
       resident.roomId = null;
 
       await resident.save();
+
+      // Notify admin/staff that a room is now vacant
+      await notify({
+        title: "Resident checked out",
+        message: `${resident.name} checked out${vacatedRoomNumber ? ` — Room ${vacatedRoomNumber} is now vacant` : ""}.`,
+        type: "room",
+        roles: ["admin", "staff"],
+        relatedId: resident._id,
+      });
 
       // Disable Login
       await User.findOneAndUpdate(

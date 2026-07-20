@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Plus, Search, Edit, Trash2, LogOut } from "lucide-react";
+import { Plus, Search, Edit, Trash2, LogOut, Eye } from "lucide-react";
 import API from "../api/axios";
 import AddResidentModal from "../components/AddResidentModal";
+import ResidentProfileModal from "../components/ResidentProfileModal";
 
 export default function Residents() {
   const [residents, setResidents] = useState([]);
@@ -9,6 +10,7 @@ export default function Residents() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editData, setEditData] = useState(null); // null = add mode, object = edit mode
+  const [viewData, setViewData] = useState(null); // resident being viewed (read-only)
 
   const loadResidents = async () => {
     try {
@@ -29,6 +31,10 @@ export default function Residents() {
   const filteredResidents = residents.filter((resident) =>
     resident.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleView = (resident) => {
+    setViewData(resident);
+  };
 
   const handleEdit = (resident) => {
     setEditData(resident);
@@ -174,6 +180,14 @@ export default function Residents() {
                   <td>
                     <div className="flex justify-center gap-3">
                       <button
+                        onClick={() => handleView(resident)}
+                        className="text-gray-500 hover:text-gray-700"
+                        title="View Profile"
+                      >
+                        <Eye size={18} />
+                      </button>
+
+                      <button
                         onClick={() => handleEdit(resident)}
                         className="text-blue-600 hover:text-blue-800"
                         title="Edit"
@@ -214,6 +228,14 @@ export default function Residents() {
             setEditData(null);
           }}
           onSuccess={loadResidents}
+        />
+      )}
+
+      {/* View Resident Profile Modal */}
+      {viewData && (
+        <ResidentProfileModal
+          resident={viewData}
+          onClose={() => setViewData(null)}
         />
       )}
     </div>

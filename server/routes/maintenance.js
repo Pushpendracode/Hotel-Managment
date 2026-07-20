@@ -3,11 +3,13 @@ const router = express.Router()
 
 const Maintenance = require('../models/Maintenance')
 const Resident = require('../models/Resident')
+const Room = require('../models/Room')
 const User = require('../models/User')      
 const Team = require('../models/Team')      
 
 const { verifyToken, checkRole } = require('../middleware/auth')
 const { sendEmail } = require('../utils/email')
+const { notify } = require('../utils/notify')
 
 // GET — residents see only their own
 router.get('/', verifyToken, async (req, res) => {
@@ -38,23 +40,32 @@ router.get('/', verifyToken, async (req, res) => {
 router.post('/', verifyToken, async (req, res) => {
   try {
     let roomId = req.body.roomId
+    let residentDoc
 
     if (req.user.role === 'resident') {
-      const Resident = require('../models/Resident')
-      const resident = await Resident.findOne({ email: req.user.email })
-      if (!resident) return res.status(400).json({ message: 'No resident profile linked to this account' })
-      roomId = resident.roomId
+      residentDoc = await Resident.findOne({ email: req.user.email })
+      if (!residentDoc) return res.status(400).json({ message: 'No resident profile linked to this account' })
+      roomId = residentDoc.roomId
+    } else {
+      // Admin/staff filing on behalf of a resident — derive the resident
+      // from whoever currently occupies the selected room.
+      if (!roomId) return res.status(400).json({ message: 'roomId is required' })
+      const room = await Room.findById(roomId)
+      if (!room) return res.status(404).json({ message: 'Room not found' })
+      if (!room.residentId) return res.status(400).json({ message: 'This room has no resident assigned' })
+      residentDoc = await Resident.findById(room.residentId)
+      if (!residentDoc) return res.status(404).json({ message: 'Resident not found for this room' })
     }
 
     const request = await Maintenance.create({
       ...req.body,
       roomId,
-      residentId: req.user._id
+      residentId: residentDoc._id, // was incorrectly req.user._id before — didn't match the ref('Resident') schema
     })
 
-    // Send confirmation email to resident
+    // Send confirmation email to the resident (not necessarily req.user, if staff filed it)
     await sendEmail({
-      to:      req.user.email,
+      to:      residentDoc.email,
       subject: 'Maintenance Request Submitted — HostelPro',
       html: `
         <h2>Your maintenance request has been submitted</h2>
@@ -63,6 +74,15 @@ router.post('/', verifyToken, async (req, res) => {
         <p><strong>Status:</strong> Open</p>
         <p>We will assign a staff member shortly.</p>
       `
+    })
+
+    // Notify admin/staff that a new request needs attention
+    await notify({
+      title: 'New maintenance request',
+      message: `${residentDoc.name} reported: ${request.issue} (${request.priority} priority)`,
+      type: 'maintenance',
+      roles: ['admin', 'staff'],
+      relatedId: request._id,
     })
 
     res.status(201).json(request)
@@ -119,9 +139,19 @@ router.put('/:id/assign', verifyToken, checkRole(['admin', 'staff']), async (req
 
     await request.populate([
       { path: 'roomId', select: 'number floor' },
-      { path: 'residentId', select: 'name' },
+      { path: 'residentId', select: 'name email' },
       { path: 'assignedTo' }
     ])
+
+    // Notify the resident their request is now in progress
+    const linkedUser = await User.findOne({ email: request.residentId?.email })
+    await notify({
+      title: 'Maintenance request in progress',
+      message: `Your request "${request.issue}" has been assigned and is now in progress.`,
+      type: 'maintenance',
+      userId: linkedUser?._id,
+      relatedId: request._id,
+    })
 
     res.json(request)
 
@@ -162,9 +192,19 @@ router.put(
 
       await request.populate([
         { path: "roomId", select: "number floor" },
-        { path: "residentId", select: "name" },
+        { path: "residentId", select: "name email" },
         { path: "assignedTo" },
       ]);
+
+      // Notify the resident of the status change
+      const linkedUser = await User.findOne({ email: request.residentId?.email });
+      await notify({
+        title: "Maintenance request updated",
+        message: `Your request "${request.issue}" is now marked as ${status}.`,
+        type: "maintenance",
+        userId: linkedUser?._id,
+        relatedId: request._id,
+      });
 
       res.json(request);
     } catch (err) {

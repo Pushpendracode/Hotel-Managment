@@ -3,11 +3,13 @@ const router = express.Router();
 
 const Invoice = require("../models/Invoice");
 const Resident = require("../models/Resident");
+const User = require("../models/User");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 
 const { sendEmail } = require("../utils/email");
 const { verifyToken, checkRole } = require("../middleware/auth");
+const { notify } = require("../utils/notify");
 
 // ===============================
 // GET ALL INVOICES
@@ -85,8 +87,6 @@ router.post(
         "residentId",
         "name email"
       );
-// Send response immediately
-res.status(201).json(populated);
 
       // Send Email
       if (populated.residentId?.email) {
@@ -118,6 +118,16 @@ res.status(201).json(populated);
           console.log("Email Error:", emailErr.message);
         }
       }
+
+      // In-app notification to the resident
+      const linkedUser = await User.findOne({ email: populated.residentId?.email });
+      await notify({
+        title: "New invoice generated",
+        message: `An invoice for ₹${total} is due on ${new Date(dueDate).toLocaleDateString("en-IN")}.`,
+        type: "billing",
+        userId: linkedUser?._id,
+        relatedId: invoice._id,
+      });
 
       res.status(201).json(populated);
     } catch (err) {
@@ -173,6 +183,15 @@ router.post("/:id/pay", verifyToken, async (req, res) => {
       totalPaid >= invoice.total ? "paid" : "partial";
 
     await invoice.save();
+
+    const payingResident = await Resident.findById(invoice.residentId);
+    await notify({
+      title: "Payment received",
+      message: `₹${amount} payment received from ${payingResident?.name || "a resident"} (${invoice.status}).`,
+      type: "billing",
+      roles: ["admin", "staff"],
+      relatedId: invoice._id,
+    });
 
     res.json(invoice);
   } catch (err) {
@@ -285,6 +304,15 @@ router.post("/:id/verify-payment", verifyToken, async (req, res) => {
     invoice.status = "paid";
 
     await invoice.save();
+
+    const payingResident = await Resident.findById(invoice.residentId);
+    await notify({
+      title: "Payment received",
+      message: `₹${invoice.total} paid online via Razorpay by ${payingResident?.name || "a resident"}.`,
+      type: "billing",
+      roles: ["admin", "staff"],
+      relatedId: invoice._id,
+    });
 
     res.json({
       message: "Payment verified successfully",

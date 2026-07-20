@@ -3,6 +3,7 @@ const router   = express.Router()
 const bcrypt   = require('bcryptjs')
 const jwt      = require('jsonwebtoken')
 const mongoose = require('mongoose')
+const { verifyToken, checkRole } = require('../middleware/auth')
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -21,20 +22,23 @@ router.post('/login', async (req, res) => {
 })
 
 // POST /api/auth/register
+// Public self-registration is ALWAYS a resident account. Never trust a
+// client-supplied `role` here — admin/staff accounts are created via the
+// admin-only Users page or the resident-creation flow, not this route.
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role, phone } = req.body
+    const { name, email, password, phone } = req.body
     const db = mongoose.connection.db
     const exists = await db.collection('users').findOne({ email })
     if (exists) return res.status(400).json({ message: 'Email already registered' })
     const hashed = await bcrypt.hash(password, 10)
     const result = await db.collection('users').insertOne({
       name, email, password: hashed,
-      role: role || 'resident', phone: phone || '',
+      role: 'resident', phone: phone || '',
       isActive: true, createdAt: new Date()
     })
     const token = jwt.sign({ id: result.insertedId }, process.env.JWT_SECRET || 'hostel_super_secret_key', { expiresIn: '7d' })
-    res.status(201).json({ token, user: { id: result.insertedId, name, email, role: role || 'resident' } })
+    res.status(201).json({ token, user: { id: result.insertedId, name, email, role: 'resident' } })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
@@ -55,8 +59,8 @@ router.get('/me', async (req, res) => {
   }
 })
 
-// GET all users
-router.get('/users', async (req, res) => {
+// GET all users — admin only
+router.get('/users', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
     const db    = mongoose.connection.db
     const users = await db.collection('users').find({}).toArray()
@@ -67,8 +71,8 @@ router.get('/users', async (req, res) => {
   }
 })
 
-// PUT update user role
-router.put('/users/:id/role', async (req, res) => {
+// PUT update user role — admin only
+router.put('/users/:id/role', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
     const db = mongoose.connection.db
     await db.collection('users').updateOne(
@@ -81,16 +85,16 @@ router.put('/users/:id/role', async (req, res) => {
   }
 })
 
-// GET check env
-router.get('/check-env', (req, res) => {
+// GET check env — admin only
+router.get('/check-env', verifyToken, checkRole(['admin']), (req, res) => {
   res.json({
     mongo_uri_set: !!process.env.MONGO_URI,
     mongo_uri_preview: process.env.MONGO_URI?.substring(0, 30) + '...'
   })
 })
 
-// GET seed all data
-router.get('/seed-all', async (req, res) => {
+// GET seed all data — admin only (destructive: wipes and reseeds the DB)
+router.get('/seed-all', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
     const uri = process.env.MONGO_URI
     if (!uri) return res.status(500).json({ message: 'MONGO_URI not set' })
@@ -183,8 +187,8 @@ router.get('/seed-all', async (req, res) => {
   }
 })
 
-// GET seed test resident only
-router.get('/seed-test-resident', async (req, res) => {
+// GET seed test resident only — admin only
+router.get('/seed-test-resident', verifyToken, checkRole(['admin']), async (req, res) => {
   try {
     const db   = mongoose.connection.db
     const room = await db.collection('rooms').findOne({ status: 'vacant' })
