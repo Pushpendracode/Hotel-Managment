@@ -16,9 +16,11 @@ A comprehensive MERN stack hostel management system for managing rooms, resident
 ## ✨ Features
 - JWT Authentication with role-based access control (Admin, Staff, Resident)
 - Room Allocation with real-time floor grid view and room creation
-- Resident Management with check-in/checkout
-- Maintenance Request tracking (residents see only their own)
-- Billing and Invoice generation (residents see only their own invoices)
+- Resident Management with check-in/checkout, room changes, and a read-only profile view
+- Maintenance Request tracking (residents see only their own; staff assign and update status)
+- Billing and Invoice generation with discounts, late fees, and payment history
+- Online payments via Razorpay, plus manual cash/UPI/bank recording
+- Real-time in-app notifications for maintenance updates, new invoices, payments received, check-ins and check-outs
 - Financial Reports with charts (admin only)
 - User Role management and permissions
 
@@ -35,10 +37,21 @@ A comprehensive MERN stack hostel management system for managing rooms, resident
 | Own invoices only | ✅ | ✅ | ✅ |
 | Financial reports | ✅ | ❌ | ❌ |
 | User management | ✅ | ❌ | ❌ |
+| Reseed demo data | ✅ | ❌ | ❌ |
 
 ## ⚠️ Known Limitations
-- **Notifications page** displays sample/demo alerts for admin and staff roles. It is not yet wired to a live backend feed — real-time notifications (maintenance updates, billing reminders) are a planned next step.
-- **Payment processing** is recorded manually (cash/UPI/card label only). There is no live integration with a payment gateway like Razorpay or Stripe yet — this is a planned next step for production use.
+- **SMS notifications** are not implemented — in-app and email notifications are live, but there's no SMS provider (e.g. Twilio) wired up yet.
+- **Payment plans/installments** aren't supported yet — invoices are paid in full or via manual partial payments, but there's no way to schedule an invoice into multiple installments.
+- **Room preference on assignment** — admins currently assign any vacant room manually; there's no field to capture a resident's preferred room type/floor.
+
+## 🛡 Security
+- Passwords are hashed with bcrypt; sessions use JWT (7-day expiry).
+- All state-changing routes are protected by role-based middleware (`admin`/`staff`/`resident`).
+- Public self-registration always creates a `resident` account — the API never trusts a client-supplied role.
+- User listing, role changes, env checks, and the demo data seed routes are admin-only.
+- CORS is restricted to known frontend origins (set via `FRONTEND_URL`), not `*`.
+- Rate limiting is applied globally and more strictly on `/api/auth/login`.
+- Security headers are set via `helmet`.
 
 ## 🛠 Tech Stack
 | Layer | Technology |
@@ -47,6 +60,9 @@ A comprehensive MERN stack hostel management system for managing rooms, resident
 | Backend | Node.js, Express.js |
 | Database | MongoDB Atlas |
 | Auth | JWT + bcrypt |
+| Payments | Razorpay |
+| Email | Nodemailer (Brevo SMTP) |
+| Security | Helmet, express-rate-limit |
 | Deployment | Netlify + Render |
 
 ## 🚀 Setup & Run Locally
@@ -63,6 +79,12 @@ npm install
 # MONGO_URI=mongodb://localhost:27017/hostel-pro
 # JWT_SECRET=your_secret_key
 # PORT=5000
+# FRONTEND_URL=http://localhost:5173
+# SMTP_USER=your_brevo_smtp_user
+# SMTP_PASS=your_brevo_smtp_password
+# SMTP_FROM=noreply@yourdomain.com
+# RAZORPAY_KEY_ID=your_razorpay_key_id
+# RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 npm run dev
 # Server runs on http://localhost:5000
 ```
@@ -73,28 +95,35 @@ cd client
 npm install
 # Create .env file with:
 # VITE_API_URL=http://localhost:5000/api
+# VITE_RAZORPAY_KEY_ID=your_razorpay_key_id
 npm run dev
 # App runs on http://localhost:5173
 ```
 
 ### Seed Data
+The seed routes wipe and recreate all demo data, so they require an admin login.
+
 ```bash
-# After server is running, visit:
-http://localhost:5000/api/auth/seed-all
+# 1. Log in as admin (admin@hostelpro.com / admin123), then in the browser
+#    console run: localStorage.getItem('token')
+# 2. Call the seed route with that token:
+curl http://localhost:5000/api/auth/seed-all \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
 ```
 
 ## 📁 Project Structure
 ```
 hostel-pro/
 ├── server/
-│   ├── models/        # Room, Resident, Invoice, Maintenance
-│   ├── routes/        # Auth, Rooms, Residents, Billing, Reports
+│   ├── models/        # Room, Resident, Invoice, Maintenance, Notification, User, Team
+│   ├── routes/        # Auth, Rooms, Residents, Maintenance, Invoices, Reports, Notifications
 │   ├── middleware/    # JWT auth + RBAC role check
+│   ├── utils/          # Email (Nodemailer) + Notification helper
 │   └── server.js
 └── client/
     └── src/
-        ├── pages/     # Dashboard, Rooms, Residents, Billing etc.
-        ├── components/# Layout, Sidebar, Topbar
-        ├── context/   # Auth context
-        └── api/       # Axios instance
+        ├── pages/          # Dashboard, ResidentDashboard, Rooms, Residents, Billing, etc.
+        ├── components/     # Layout, Sidebar, Topbar, AddResidentModal, ResidentProfileModal
+        ├── context/        # Auth context
+        └── api/            # Axios instance
 ```
