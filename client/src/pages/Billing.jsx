@@ -156,6 +156,7 @@ function GenerateModal({ onClose, onGenerate, residents }) {
               Due Date <span className="text-red-400">*</span>
             </label>
             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+            min={new Date().toISOString().split('T')[0]}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm
                          focus:outline-none focus:ring-2 focus:ring-emerald-500" />
           </div>
@@ -470,7 +471,9 @@ export default function Billing() {
           onClose={() => setShowGenerate(false)}
           onGenerate={fetchAll}
           residents={residents}
+    
         />
+        
       )}
 
       {payInvoice && (
