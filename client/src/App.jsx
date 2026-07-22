@@ -11,6 +11,8 @@ import Maintenance from './pages/Maintenance';
 import Billing from './pages/Billing';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
+import Signup from './pages/Signup'
+
 
 function ProtectedRoute({ children, roles }) {
   const { user, loading } = useAuth();
@@ -36,6 +38,7 @@ export default function App() {
             <Route path="reports"     element={<ProtectedRoute roles={['admin']}><Reports /></ProtectedRoute>} />
             <Route path="users"       element={<ProtectedRoute roles={['admin']}><Users /></ProtectedRoute>} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="/signup" element={<Signup />} />
           </Route>
         </Routes>
       </BrowserRouter>

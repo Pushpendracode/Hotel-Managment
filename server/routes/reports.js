@@ -55,4 +55,26 @@ router.get('/summary', verifyToken, checkRole(['admin']), async (req, res) => {
   }
 })
 
+router.get('/payments', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const invoices = await Invoice.find()
+      .populate('residentId', 'name email roomId')
+      .sort({ createdAt: -1 })
+
+    const paymentReport = invoices.map(inv => ({
+      resident:    inv.residentId?.name || 'Unknown',
+      email:       inv.residentId?.email || '',
+      month:       new Date(inv.createdAt).toLocaleString('default', { month: 'long', year: 'numeric' }),
+      total:       inv.total,
+      status:      inv.status,
+      paidAmount:  inv.paymentHistory?.reduce((s, p) => s + p.amount, 0) || 0,
+      dueDate:     inv.dueDate,
+      lineItems:   inv.lineItems,
+    }))
+
+    res.json(paymentReport)
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
 module.exports = router

@@ -23,6 +23,7 @@ export default function Reports() {
   const [data, setData]     = useState(null)
   const [loading, setLoading] = useState(true)
   const [range, setRange]   = useState('6months')
+const [payments, setPayments] = useState([])
 
   useEffect(() => {
     API.get('/reports/summary')
@@ -30,6 +31,11 @@ export default function Reports() {
       .catch(() => toast.error('Failed to load reports'))
       .finally(() => setLoading(false))
   }, [])
+
+API.get('/reports/payments')
+  .then(res => setPayments(res.data))
+  .catch(console.error)
+
 
   if (loading) return (
     <div className="flex items-center justify-center h-64 text-sm text-gray-400">
@@ -206,8 +212,63 @@ export default function Reports() {
                                           py-2 border-b border-gray-50 text-sm">
                 <span className="text-gray-400">{label}</span>
                 <span className={`font-medium ${color || 'text-gray-800'}`}>{value}</span>
-              </div>
+              </div>  
+            
             ))}
+            <div className="bg-white rounded-xl border border-gray-100 p-5 mt-4">
+  <h3 className="text-sm font-semibold text-gray-900 mb-4">
+    Rent Payment Tracker — Who Paid & When
+  </h3>
+  {payments.length === 0 ? (
+    <div className="text-center py-8 text-sm text-gray-400">No payment records found</div>
+  ) : (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead className="border-b border-gray-50">
+          <tr>
+            {['Resident', 'Month', 'Room Rent', 'Total', 'Paid', 'Status', 'Due Date'].map(h => (
+              <th key={h} className="text-left text-xs font-medium text-gray-400
+                                     uppercase tracking-wide py-3 px-4">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {payments.map((p, i) => (
+            <tr key={i} className={`border-b border-gray-50 hover:bg-gray-50
+              ${p.status === 'overdue' ? 'bg-red-50/30' : ''}`}>
+              <td className="py-3 px-4">
+                <div className="text-sm font-medium text-gray-800">{p.resident}</div>
+                <div className="text-xs text-gray-400">{p.email}</div>
+              </td>
+              <td className="py-3 px-4 text-sm text-gray-600">{p.month}</td>
+              <td className="py-3 px-4 text-sm text-gray-600">
+                ₹{p.lineItems?.find(li => li.description === 'Room Rent')?.amount?.toLocaleString() || '—'}
+              </td>
+              <td className="py-3 px-4 text-sm font-medium text-gray-800">
+                ₹{p.total.toLocaleString()}
+              </td>
+              <td className="py-3 px-4 text-sm text-gray-600">
+                ₹{p.paidAmount.toLocaleString()}
+              </td>
+              <td className="py-3 px-4">
+                <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium capitalize
+                  ${p.status === 'paid'    ? 'bg-emerald-50 text-emerald-700' :
+                    p.status === 'overdue' ? 'bg-red-50 text-red-700' :
+                    p.status === 'partial' ? 'bg-blue-50 text-blue-700' :
+                                            'bg-amber-50 text-amber-700'}`}>
+                  {p.status}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-sm text-gray-500">
+                {p.dueDate ? new Date(p.dueDate).toLocaleDateString('en-IN') : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
           </div>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 
+
 export default function Login() {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -116,7 +117,12 @@ export default function Login() {
             </div>
           </div>
         </div>
-
+<p className="text-center text-sm text-gray-500 mt-4">
+  Don't have an account?{' '}
+  <Link to="/signup" className="text-emerald-600 hover:text-emerald-700 font-medium">
+    Sign up
+  </Link>
+</p>
         <p className="text-center text-xs text-gray-400 mt-6">
           HostelPro Management System © 2026
         </p>
