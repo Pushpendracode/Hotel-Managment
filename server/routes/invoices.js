@@ -4,24 +4,56 @@ const router = express.Router();
 const Invoice = require("../models/Invoice");
 const Resident = require("../models/Resident");
 const User = require("../models/User");
+
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 
 const { sendEmail } = require("../utils/email");
-const { verifyToken, checkRole } = require("../middleware/auth");
 const { notify } = require("../utils/notify");
+const { verifyToken, checkRole } = require("../middleware/auth");
 
-// ===============================
+
+// ==========================================
+// Helper Function
+// ==========================================
+const buildInvoiceEmail = (name, total, dueDate) => {
+  return `
+      <h2>Hello ${name},</h2>
+
+      <p>Your invoice has been generated successfully.</p>
+
+      <p><strong>Total Amount:</strong> ₹${total}</p>
+
+      <p><strong>Due Date:</strong> ${new Date(
+        dueDate
+      ).toLocaleDateString("en-IN")}</p>
+
+      <br>
+
+      <p>Please login to HostelPro to view and pay your invoice.</p>
+
+      <br>
+
+      <p>Regards,<br/>HostelPro Team</p>
+    `;
+};
+
+
+// ==========================================
 // GET ALL INVOICES
-// ===============================
+// ==========================================
 router.get("/", verifyToken, async (req, res) => {
   try {
-    let filter = {};
+    const filter = {};
 
+    // Resident can only view their own invoices
     if (req.user.role === "resident") {
+
       const resident = await Resident.findOne({
         email: req.user.email,
-      });
+      })
+        .select("_id")
+        .lean();
 
       if (!resident) {
         return res.json([]);
@@ -36,19 +68,25 @@ router.get("/", verifyToken, async (req, res) => {
 
     const invoices = await Invoice.find(filter)
       .populate("residentId", "name email roomId")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json(invoices);
+
   } catch (err) {
+
+    console.error(err);
+
     res.status(500).json({
       message: err.message,
     });
+
   }
 });
 
-// ===============================
+// ==========================================
 // GENERATE INVOICE
-// ===============================
+// ==========================================
 router.post(
   "/generate",
   verifyToken,
@@ -57,22 +95,101 @@ router.post(
     try {
       const {
         residentId,
-        lineItems,
-        discount,
-        lateFee,
+        lineItems = [],
+        discount = 0,
+        lateFee = 0,
         dueDate,
       } = req.body;
 
+      // ===========================
+      // Validation
+      // ===========================
+      if (!residentId) {
+        return res.status(400).json({
+          message: "Resident is required.",
+        });
+      }
+
+      if (!lineItems.length) {
+        return res.status(400).json({
+          message: "Invoice must contain at least one item.",
+        });
+      }
+
+      if (!dueDate) {
+        return res.status(400).json({
+          message: "Due date is required.",
+        });
+      }
+
+      // Don't allow past dates
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const due = new Date(dueDate);
+      due.setHours(0, 0, 0, 0);
+
+      if (due < today) {
+        return res.status(400).json({
+          message: "Due date cannot be in the past.",
+        });
+      }
+
+      // ===========================
+      // Resident
+      // ===========================
+      const resident = await Resident.findById(residentId)
+        .select("name email")
+        .lean();
+
+      if (!resident) {
+        return res.status(404).json({
+          message: "Resident not found.",
+        });
+      }
+
+      // ===========================
+      // Prevent duplicate invoice
+      // (same resident + same month)
+      // ===========================
+      const startMonth = new Date(due.getFullYear(), due.getMonth(), 1);
+
+      const endMonth = new Date(
+        due.getFullYear(),
+        due.getMonth() + 1,
+        1
+      );
+
+      const existing = await Invoice.findOne({
+        residentId,
+        dueDate: {
+          $gte: startMonth,
+          $lt: endMonth,
+        },
+      }).lean();
+
+      if (existing) {
+        return res.status(400).json({
+          message: "Invoice already exists for this month.",
+        });
+      }
+
+      // ===========================
+      // Calculate Total
+      // ===========================
       const subtotal = lineItems.reduce(
-        (sum, item) => sum + Number(item.amount),
+        (sum, item) => sum + Number(item.amount || 0),
         0
       );
 
       const total =
         subtotal -
-        Number(discount || 0) +
-        Number(lateFee || 0);
+        Number(discount) +
+        Number(lateFee);
 
+      // ===========================
+      // Create Invoice
+      // ===========================
       const invoice = await Invoice.create({
         residentId,
         lineItems,
@@ -83,66 +200,68 @@ router.post(
         status: "pending",
       });
 
-      const populated = await invoice.populate(
-        "residentId",
-        "name email"
-      );
+      // Return response immediately
+      res.status(201).json(invoice);
 
-      // Send Email
-      if (populated.residentId?.email) {
-        try {
-          await sendEmail({
-            to: populated.residentId.email,
-            subject: "New Invoice Generated - HostelPro",
-            html: `
-              <h2>Hello ${populated.residentId.name},</h2>
-
-              <p>Your invoice has been generated successfully.</p>
-
-              <p><strong>Total Amount:</strong> ₹${total}</p>
-
-              <p><strong>Due Date:</strong> ${new Date(
-                dueDate
-              ).toLocaleDateString("en-IN")}</p>
-
-              <p>Please login to HostelPro to view and pay your invoice.</p>
-
-              <br>
-
-              <p>Regards,<br>HostelPro Team</p>
-            `,
-          });
-
-          console.log("Invoice email sent.");
-        } catch (emailErr) {
-          console.log("Email Error:", emailErr.message);
-        }
+      // ======================================
+      // Background Email (Doesn't slow API)
+      // ======================================
+      if (resident.email) {
+        sendEmail({
+          to: resident.email,
+          subject: "New Invoice Generated - HostelPro",
+          html: buildInvoiceEmail(
+            resident.name,
+            total,
+            dueDate
+          ),
+        }).catch((err) => {
+          console.log("Email Error:", err.message);
+        });
       }
 
-      // In-app notification to the resident
-      const linkedUser = await User.findOne({ email: populated.residentId?.email });
-      await notify({
-        title: "New invoice generated",
-        message: `An invoice for ₹${total} is due on ${new Date(dueDate).toLocaleDateString("en-IN")}.`,
-        type: "billing",
-        userId: linkedUser?._id,
-        relatedId: invoice._id,
-      });
+      // ======================================
+      // Background Notification
+      // ======================================
+      User.findOne({
+        email: resident.email,
+      })
+        .select("_id")
+        .lean()
+        .then((user) => {
+          if (!user) return;
 
-      res.status(201).json(populated);
+          return notify({
+            title: "New Invoice Generated",
+            message: `An invoice of ₹${total} has been generated and is due on ${new Date(
+              dueDate
+            ).toLocaleDateString("en-IN")}.`,
+            type: "billing",
+            userId: user._id,
+            relatedId: invoice._id,
+          });
+        })
+        .catch(console.error);
+
     } catch (err) {
+
+      console.error(err);
+
       res.status(500).json({
         message: err.message,
       });
+
     }
   }
 );
 
-// ===============================
+// ==========================================
 // PAY INVOICE
-// ===============================
+// ==========================================
 router.post("/:id/pay", verifyToken, async (req, res) => {
   try {
+    const { amount, method } = req.body;
+
     const invoice = await Invoice.findById(req.params.id);
 
     if (!invoice) {
@@ -151,10 +270,13 @@ router.post("/:id/pay", verifyToken, async (req, res) => {
       });
     }
 
+    // Resident can only pay their own invoice
     if (req.user.role === "resident") {
       const resident = await Resident.findOne({
         email: req.user.email,
-      });
+      })
+        .select("_id")
+        .lean();
 
       if (
         !resident ||
@@ -166,73 +288,135 @@ router.post("/:id/pay", verifyToken, async (req, res) => {
       }
     }
 
-    const { amount, method } = req.body;
+    // Prevent overpayment
+    const totalPaid = invoice.paymentHistory.reduce(
+      (sum, payment) => sum + Number(payment.amount),
+      0
+    );
+
+    const remainingAmount = invoice.total - totalPaid;
+
+    if (Number(amount) > remainingAmount) {
+      return res.status(400).json({
+        message: `Maximum payable amount is ₹${remainingAmount}`,
+      });
+    }
 
     invoice.paymentHistory.push({
-      amount,
+      amount: Number(amount),
       method,
       paidAt: new Date(),
     });
 
-    const totalPaid = invoice.paymentHistory.reduce(
-      (sum, payment) => sum + payment.amount,
+    const updatedTotal = invoice.paymentHistory.reduce(
+      (sum, payment) => sum + Number(payment.amount),
       0
     );
 
-    invoice.status =
-      totalPaid >= invoice.total ? "paid" : "partial";
+    if (updatedTotal >= invoice.total) {
+      invoice.status = "paid";
+    } else {
+      invoice.status = "partial";
+    }
 
     await invoice.save();
 
-    const payingResident = await Resident.findById(invoice.residentId);
-    await notify({
-      title: "Payment received",
-      message: `₹${amount} payment received from ${payingResident?.name || "a resident"} (${invoice.status}).`,
-      type: "billing",
-      roles: ["admin", "staff"],
-      relatedId: invoice._id,
-    });
-
     res.json(invoice);
+
+    // Background Notification
+    Resident.findById(invoice.residentId)
+      .select("name")
+      .lean()
+      .then((resident) => {
+        return notify({
+          title: "Payment Received",
+          message: `₹${amount} received from ${
+            resident?.name || "Resident"
+          }. Invoice status: ${invoice.status}.`,
+          type: "billing",
+          roles: ["admin", "staff"],
+          relatedId: invoice._id,
+        });
+      })
+      .catch(console.error);
+
   } catch (err) {
+    console.error(err);
+
     res.status(500).json({
       message: err.message,
     });
   }
 });
 
-// ===============================
+
+// ==========================================
 // DELETE INVOICE
-// ===============================
+// ==========================================
 router.delete(
   "/:id",
   verifyToken,
   checkRole(["admin"]),
   async (req, res) => {
     try {
-      await Invoice.findByIdAndDelete(req.params.id);
+
+      const invoice = await Invoice.findById(req.params.id);
+
+      if (!invoice) {
+        return res.status(404).json({
+          message: "Invoice not found",
+        });
+      }
+
+      await invoice.deleteOne();
 
       res.json({
+        success: true,
         message: "Invoice deleted successfully",
       });
+
     } catch (err) {
+
+      console.error(err);
+
       res.status(500).json({
         message: err.message,
       });
+
     }
   }
 );
 
-// ===============================
+// ==========================================
 // CREATE RAZORPAY ORDER
-// ===============================
+// ==========================================
 router.post("/:id/create-order", verifyToken, async (req, res) => {
   try {
-    const invoice = await Invoice.findById(req.params.id);
+    const invoice = await Invoice.findById(req.params.id).lean();
 
     if (!invoice) {
       return res.status(404).json({
         message: "Invoice not found",
+      });
+    }
+
+    // Prevent creating order for paid invoice
+    if (invoice.status === "paid") {
+      return res.status(400).json({
+        message: "Invoice already paid",
+      });
+    }
+
+    const totalPaid = (invoice.paymentHistory || []).reduce(
+      (sum, payment) => sum + Number(payment.amount),
+      0
+    );
+
+    const remainingAmount = invoice.total - totalPaid;
+
+    if (remainingAmount <= 0) {
+      return res.status(400).json({
+        message: "Nothing left to pay",
       });
     }
 
@@ -242,26 +426,31 @@ router.post("/:id/create-order", verifyToken, async (req, res) => {
     });
 
     const order = await razorpay.orders.create({
-      amount: invoice.total * 100,
+      amount: remainingAmount * 100,
       currency: "INR",
       receipt: `invoice_${invoice._id}`,
     });
 
     res.json({
+      success: true,
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
     });
+
   } catch (err) {
+    console.error(err);
+
     res.status(500).json({
       message: err.message,
     });
   }
 });
 
-// ===============================
+
+// ==========================================
 // VERIFY PAYMENT
-// ===============================
+// ==========================================
 router.post("/:id/verify-payment", verifyToken, async (req, res) => {
   try {
     const {
@@ -294,8 +483,26 @@ router.post("/:id/verify-payment", verifyToken, async (req, res) => {
       });
     }
 
+    // Prevent duplicate payment
+    const alreadyPaid = invoice.paymentHistory.some(
+      (payment) => payment.paymentId === razorpay_payment_id
+    );
+
+    if (alreadyPaid) {
+      return res.status(400).json({
+        message: "Payment already verified",
+      });
+    }
+
+    const totalPaid = invoice.paymentHistory.reduce(
+      (sum, payment) => sum + Number(payment.amount),
+      0
+    );
+
+    const remainingAmount = invoice.total - totalPaid;
+
     invoice.paymentHistory.push({
-      amount: invoice.total,
+      amount: remainingAmount,
       method: "razorpay",
       paymentId: razorpay_payment_id,
       paidAt: new Date(),
@@ -305,20 +512,32 @@ router.post("/:id/verify-payment", verifyToken, async (req, res) => {
 
     await invoice.save();
 
-    const payingResident = await Resident.findById(invoice.residentId);
-    await notify({
-      title: "Payment received",
-      message: `₹${invoice.total} paid online via Razorpay by ${payingResident?.name || "a resident"}.`,
-      type: "billing",
-      roles: ["admin", "staff"],
-      relatedId: invoice._id,
-    });
-
     res.json({
+      success: true,
       message: "Payment verified successfully",
       invoice,
     });
+
+    // Background notification
+    Resident.findById(invoice.residentId)
+      .select("name")
+      .lean()
+      .then((resident) => {
+        return notify({
+          title: "Online Payment Received",
+          message: `₹${remainingAmount} paid successfully by ${
+            resident?.name || "Resident"
+          }.`,
+          type: "billing",
+          roles: ["admin", "staff"],
+          relatedId: invoice._id,
+        });
+      })
+      .catch(console.error);
+
   } catch (err) {
+    console.error(err);
+
     res.status(500).json({
       message: err.message,
     });
